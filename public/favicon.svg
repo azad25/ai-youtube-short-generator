@@ -1,0 +1,11 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background with rounded corners -->
+  <rect width="32" height="32" rx="6" fill="#ff664d"/>
+  
+  <!-- Play button -->
+  <path d="M11 8v16l12-8-12-8z" fill="#ffffff" stroke="none"/>
+  
+  <!-- AI indicator dot -->
+  <circle cx="25" cy="7" r="2.5" fill="#a591f4"/>
+  <circle cx="25" cy="7" r="1.2" fill="#ffffff"/>
+</svg>

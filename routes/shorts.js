@@ -1,0 +1,861 @@
+import { json, body } from '../lib/middleware.js';
+import { budgetSnapshot, recommendImagePlan } from '../lib/budget.js';
+import { evidenceIssues, normalizeFact, reviewScriptClaims } from '../lib/factuality.js';
+import { normalizeSource } from '../lib/validation.js';
+import { generateSceneImage, generateNarration, renderVerticalShort } from '../lib/providers.js';
+import { uploadYoutubeShort } from '../lib/youtube.js';
+import { storage } from '../lib/storage.js';
+import { broadcast } from '../lib/sse.js';
+
+export class ShortsService {
+  constructor({ stateManager, databaseService, queueService, budgetService }) {
+    this.stateManager = stateManager;
+    this.databaseService = databaseService;
+    this.queueService = queueService;
+    this.budgetService = budgetService;
+  }
+
+  async getShorts() {
+    if (this.databaseService) {
+      return await this.databaseService.getShorts();
+    }
+    const state = await this.stateManager.getState();
+    return state.shorts || [];
+  }
+
+  async getShort(id) {
+    if (this.databaseService) {
+      return await this.databaseService.getShort(id);
+    }
+    const state = await this.stateManager.getState();
+    return state.shorts?.find(s => s.id === id) || null;
+  }
+
+  async createShort(shortData) {
+    const budget = await this.budgetService.budgetSnapshot(shortData.contentType);
+    if (!budget.plan.canGenerate) {
+      const error = new Error(budget.plan.reason);
+      error.statusCode = 402;
+      error.budget = budget;
+      throw error;
+    }
+
+    const short = {
+      id: crypto.randomUUID(),
+      ...shortData,
+      budgetPlan: budget.plan,
+      status: 'DRAFT',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      events: [{ 
+        stage: 'DRAFT', 
+        message: 'Short created. Configure an AI provider before generation.', 
+        at: new Date().toISOString() 
+      }]
+    };
+
+    if (this.databaseService) {
+      await this.databaseService.saveShort(short);
+    } else {
+      const state = await this.stateManager.getState();
+      state.shorts = state.shorts || [];
+      state.shorts.unshift(short);
+      await this.stateManager.saveState(state);
+    }
+
+    broadcast('short.updated', short);
+    return short;
+  }
+
+  async saveResearch(shortId, sources, facts) {
+    const short = await this.getShort(shortId);
+    if (!short) {
+      throw new Error('Short not found.');
+    }
+
+    const sourceIds = new Set(sources.map(source => source.id));
+    for (const fact of facts) {
+      if (fact.sourceIds.some(id => !sourceIds.has(id))) {
+        throw new Error(`Fact ${fact.id} references an unknown source.`);
+      }
+    }
+
+    if (this.databaseService) {
+      await this.databaseService.saveSources(shortId, sources);
+      await this.databaseService.saveFacts(shortId, facts);
+      const updatedShort = await this.databaseService.getShort(shortId);
+      console.log(`🔍 Updated short after save:`, {
+        id: updatedShort.id,
+        sourcesCount: (updatedShort.sources || []).length,
+        factsCount: (updatedShort.facts || []).length
+      });
+      broadcast('short.updated', updatedShort);
+      return updatedShort;
+    } else {
+      short.sources = sources;
+      short.facts = facts;
+      short.updatedAt = new Date().toISOString();
+      
+      const state = await this.stateManager.getState();
+      await this.stateManager.saveState(state);
+      broadcast('short.updated', short);
+      return short;
+    }
+  }
+
+  async generateScript(shortId, options = {}) {
+    const short = await this.getShort(shortId);
+    if (!short) {
+      throw new Error('Short not found.');
+    }
+
+    const gate = this.evidenceGate(short);
+    if (!gate.passed) {
+      const error = new Error('Evidence gate blocked script generation.');
+      error.statusCode = 422;
+      error.gate = gate;
+      throw error;
+    }
+
+    // Force synchronous processing for automation or if requested
+    if (options.synchronous || options.automation) {
+      console.log(`📝 Using synchronous script generation for short ${shortId}`);
+      
+      try {
+        const scriptResult = await this.generateScriptSync(short);
+        
+        // Update short with generated script
+        short.script = scriptResult.script;
+        short.status = 'SCRIPT_GENERATED';
+        short.updatedAt = new Date().toISOString();
+        
+        // Save to database or state
+        if (this.databaseService) {
+          await this.databaseService.saveShort(short);
+        } else {
+          const state = await this.stateManager.getState();
+          const shortIndex = state.shorts?.findIndex(s => s.id === shortId);
+          if (shortIndex !== -1) {
+            state.shorts[shortIndex] = short;
+            await this.stateManager.saveState(state);
+          }
+        }
+        
+        broadcast('short.updated', short);
+        return { script: scriptResult.script, short };
+        
+      } catch (error) {
+        console.error(`❌ Synchronous script generation failed:`, error);
+        throw new Error(`Script generation failed: ${error.message}`);
+      }
+    }
+
+    if (this.queueService && this.databaseService) {
+      // Use background processing for normal requests
+      short.status = 'QUEUED';
+      await this.databaseService.saveShort(short);
+      await this.queueService.enqueueShort(shortId);
+      broadcast('short.updated', short);
+      return { message: 'Short queued for background processing', short };
+    } else {
+      // Synchronous processing fallback for automation
+      console.log(`📝 Generating script synchronously for short ${shortId}`);
+      
+      try {
+        const scriptResult = await this.generateScriptSync(short);
+        
+        // Update short with generated script
+        short.script = scriptResult.script;
+        short.status = 'SCRIPT_GENERATED';
+        short.updatedAt = new Date().toISOString();
+        
+        // Save to database or state
+        if (this.databaseService) {
+          await this.databaseService.saveShort(short);
+        } else {
+          const state = await this.stateManager.getState();
+          const shortIndex = state.shorts?.findIndex(s => s.id === shortId);
+          if (shortIndex !== -1) {
+            state.shorts[shortIndex] = short;
+            await this.stateManager.saveState(state);
+          }
+        }
+        
+        broadcast('short.updated', short);
+        return { script: scriptResult.script, short };
+        
+      } catch (error) {
+        throw new Error(`Script generation failed: ${error.message}`);
+      }
+    }
+  }
+
+  async generateScriptSync(short) {
+    // Direct script generation using OpenRouter
+    if (!process.env.OPENROUTER_API_KEY) {
+      throw new Error('OpenRouter API key not configured');
+    }
+
+    console.log(`🤖 Calling OpenRouter to generate script for: ${short.topic}`);
+
+    const model = process.env.OPENROUTER_MODEL || 'qwen/qwen-2.5-72b-instruct';
+    
+    // Build evidence context
+    const evidenceContext = this.buildEvidenceContext(short);
+    
+    // Create script prompt
+    const prompt = this.buildScriptPrompt(short, evidenceContext);
+
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': process.env.HTTP_REFERER || 'https://shorts-factory.local',
+          'X-Title': 'Marvel Shorts Factory'
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a Marvel content creator who writes engaging, factual scripts for vertical video shorts. Focus on evidence-based storytelling with cinematic appeal.'
+            },
+            {
+              role: 'user', 
+              content: prompt
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 2000
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`OpenRouter API error: ${errorData.error?.message || response.statusText}`);
+      }
+
+      const data = await response.json();
+      const scriptContent = data.choices?.[0]?.message?.content;
+
+      if (!scriptContent) {
+        throw new Error('OpenRouter returned empty script content');
+      }
+
+      // Parse and structure the script
+      const script = this.parseGeneratedScript(scriptContent, short);
+      
+      console.log(`✅ Script generated: ${script.scenes?.length || 0} scenes, ${script.title}`);
+      
+      return { script };
+
+    } catch (error) {
+      console.error('OpenRouter script generation failed:', error);
+      throw error;
+    }
+  }
+
+  buildEvidenceContext(short) {
+    const sources = short.sources || [];
+    const facts = short.facts || [];
+    
+    let context = '\n\nEVIDENCE PACKAGE:\n';
+    
+    // Add sources
+    context += '\nSOURCES:\n';
+    sources.forEach(source => {
+      context += `- [${source.id}] ${source.title} (Tier ${source.tier})\n  URL: ${source.url}\n`;
+    });
+    
+    // Add facts
+    context += '\nFACTS:\n';
+    facts.forEach(fact => {
+      context += `- [${fact.id}] ${fact.statement} (${fact.classification})\n  Sources: ${fact.sourceIds.join(', ')}\n`;
+    });
+    
+    return context;
+  }
+
+  buildScriptPrompt(short, evidenceContext) {
+    return `Create a compelling ${short.duration}-second Marvel Short script about "${short.topic}" for ${short.contentType} content.
+
+REQUIREMENTS:
+- Duration: Exactly ${short.duration} seconds
+- Format: Vertical video (9:16)
+- Style: ${short.style || 'Cinematic'}
+- Truth Mode: ${short.truthMode}
+- Language: ${short.language || 'English'}
+
+CONTENT GUIDELINES:
+- Hook viewers in the first 3 seconds
+- Use evidence-based facts only
+- Create visual scenes perfect for image generation
+- Include compelling narration
+- End with strong conclusion/cliffhanger
+- Make it suitable for Marvel Central YouTube channel
+
+${evidenceContext}
+
+RESPONSE FORMAT (JSON):
+{
+  "title": "YouTube-ready title under 60 characters",
+  "hook": "Opening hook (3-5 seconds)",
+  "narration": "Complete narration script",
+  "youtube_description": "YouTube description with hashtags",
+  "hashtags": ["Marvel", "MCU", "Avengers"],
+  "scenes": [
+    {
+      "scene_number": 1,
+      "start_time": 0,
+      "end_time": 6,
+      "caption": "Scene text overlay",
+      "visual_description": "Detailed description for image generation",
+      "image_prompt": "Cinematic image prompt for AI generation"
+    }
+  ],
+  "claims": [
+    {
+      "statement": "Factual claim from script",
+      "classification": "CONFIRMED",
+      "evidence_ids": ["FACT-1"]
+    }
+  ]
+}
+
+Generate the script now:`;
+  }
+
+  parseGeneratedScript(content, short) {
+    try {
+      // Try to extract JSON from the response
+      let jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No JSON found in script response');
+      }
+
+      const script = JSON.parse(jsonMatch[0]);
+      
+      // Validate required fields
+      if (!script.title || !script.narration || !script.scenes) {
+        throw new Error('Script missing required fields (title, narration, scenes)');
+      }
+
+      // Ensure scenes have proper structure
+      script.scenes = script.scenes.map((scene, index) => ({
+        scene_number: index + 1,
+        start_time: scene.start_time || index * 6,
+        end_time: scene.end_time || (index + 1) * 6,
+        caption: scene.caption || `Scene ${index + 1}`,
+        visual_description: scene.visual_description || 'Marvel cinematic scene',
+        image_prompt: scene.image_prompt || `${short.topic} cinematic scene`
+      }));
+
+      return script;
+
+    } catch (error) {
+      console.error('Failed to parse generated script:', error);
+      
+      // Fallback: create basic script structure
+      return this.createFallbackScript(short, content);
+    }
+  }
+
+  createFallbackScript(short, rawContent) {
+    const sceneCount = Math.ceil(short.duration / 6);
+    const scenes = [];
+    
+    for (let i = 0; i < sceneCount; i++) {
+      scenes.push({
+        scene_number: i + 1,
+        start_time: i * 6,
+        end_time: (i + 1) * 6,
+        caption: `${short.topic} - Part ${i + 1}`,
+        visual_description: `Cinematic scene showing ${short.topic}`,
+        image_prompt: `${short.topic} Marvel cinematic scene, high quality, detailed`
+      });
+    }
+
+    return {
+      title: `${short.topic} - ${short.contentType}`,
+      hook: `Discover the truth about ${short.topic}`,
+      narration: rawContent.substring(0, 500) || `This is the story of ${short.topic} in the Marvel Cinematic Universe.`,
+      youtube_description: `Everything you need to know about ${short.topic}. #Marvel #MCU`,
+      hashtags: ['Marvel', 'MCU', short.topic.replace(/\s+/g, '')],
+      scenes,
+      claims: []
+    };
+  }
+
+  evidenceGate(short) {
+    console.log(`🚪 Evidence gate check for short ${short.id}:`, {
+      sourcesCount: (short.sources || []).length,
+      factsCount: (short.facts || []).length,
+      minimumSources: short.minimumSources
+    });
+    
+    const issues = evidenceIssues(short.facts || [], short.minimumSources);
+    if ((short.facts || []).length === 0) {
+      issues.unshift('Add a structured fact package before requesting a script.');
+    }
+    
+    const gate = { passed: issues.length === 0, failures: issues };
+    console.log(`🚪 Evidence gate result:`, gate);
+    
+    return gate;
+  }
+}
+
+export async function getShortsHandler(request, response, { shortsService }) {
+  try {
+    const shorts = await shortsService.getShorts();
+    return json(response, 200, shorts);
+  } catch (error) {
+    return json(response, 500, { error: error.message });
+  }
+}
+
+export async function getShortHandler(request, response, { shortsService, params }) {
+  try {
+    const { shortId } = params;
+    const short = await shortsService.getShort(shortId);
+    
+    if (!short) {
+      return json(response, 404, { error: 'Short not found.' });
+    }
+    
+    return json(response, 200, short);
+  } catch (error) {
+    return json(response, 500, { error: error.message });
+  }
+}
+
+export async function createShortHandler(request, response, { shortsService }) {
+  try {
+    const input = await body(request);
+    const short = await shortsService.createShort(input);
+    return json(response, 201, short);
+  } catch (error) {
+    return json(response, error.statusCode || 400, { error: error.message, budget: error.budget });
+  }
+}
+
+export async function researchHandler(request, response, { shortsService, params }) {
+  try {
+    const { shortId } = params;
+    const input = await body(request);
+    
+    console.log(`📋 Research handler called for short ${shortId} with input:`, {
+      sourcesCount: (input.sources || []).length,
+      factsCount: (input.facts || []).length,
+      sourceIds: (input.sources || []).map(s => s.id),
+      factIds: (input.facts || []).map(f => f.id)
+    });
+    
+    const sources = (input.sources || []).map(normalizeSource);
+    const facts = (input.facts || []).map(normalizeFact);
+    
+    const updatedShort = await shortsService.saveResearch(shortId, sources, facts);
+    const gate = shortsService.evidenceGate(updatedShort);
+    
+    console.log(`✅ Research saved successfully for short ${shortId}`);
+    return json(response, gate.passed ? 200 : 422, { short: updatedShort, gate });
+  } catch (error) {
+    console.error(`❌ Research handler failed for short ${params?.shortId}:`, error);
+    return json(response, error.statusCode || 400, { 
+      error: error.message,
+      details: error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : undefined
+    });
+  }
+}
+
+export async function getFactsHandler(request, response, { shortsService, params }) {
+  try {
+    const { shortId } = params;
+    const short = await shortsService.getShort(shortId);
+    
+    if (!short) {
+      return json(response, 404, { error: 'Short not found.' });
+    }
+    
+    return json(response, 200, { 
+      sources: short.sources || [], 
+      facts: short.facts || [], 
+      gate: shortsService.evidenceGate(short) 
+    });
+  } catch (error) {
+    return json(response, 500, { error: error.message });
+  }
+}
+
+export async function generateScriptHandler(request, response, { shortsService, params }) {
+  try {
+    const { shortId } = params;
+    
+    // Check if this is called from automation (Full Auto mode)
+    const { searchParams } = new URL(request.url, `http://${request.headers.host}`);
+    const isAutomation = searchParams.get('automation') === 'true';
+    
+    console.log(`📝 Script generation request for short ${shortId}, automation: ${isAutomation}`);
+    
+    const result = await shortsService.generateScript(shortId, { 
+      synchronous: isAutomation,
+      automation: isAutomation 
+    });
+    
+    return json(response, 200, result);
+  } catch (error) {
+    console.error(`❌ Script generation failed:`, error);
+    return json(response, error.statusCode || 500, { error: error.message, gate: error.gate });
+  }
+}
+export async function qaHandler(request, response, { shortsService, params }) {
+  try {
+    const { shortId } = params;
+    const short = await shortsService.getShort(shortId);
+    
+    if (!short) return json(response, 404, { error: 'Short not found.' });
+    if (!short.script) return json(response, 409, { error: 'Generate a script before factual QA.' });
+    
+    const qa = reviewScriptClaims(short.script.claims, short.facts || [], short.minimumSources);
+    short.qa = { 
+      ...qa, 
+      checkedAt: new Date().toISOString(), 
+      status: qa.passed ? 'QA PASSED' : 'QA FAILED' 
+    };
+    
+    if (shortsService.databaseService) {
+      await shortsService.databaseService.saveShort(short);
+    } else {
+      const state = await shortsService.stateManager.getState();
+      await shortsService.stateManager.saveState(state);
+    }
+    
+    broadcast('short.updated', short);
+    return json(response, qa.passed ? 200 : 422, short.qa);
+  } catch (error) {
+    return json(response, 500, { error: error.message });
+  }
+}
+
+export async function generateImageHandler(request, response, { shortsService, budgetService, params }) {
+  try {
+    const { shortId, sceneNumber } = params;
+    const short = await shortsService.getShort(shortId);
+    
+    if (!short?.script) {
+      return json(response, 409, { error: 'Generate a script before generating scene images.' });
+    }
+    
+    const scene = short.script.scenes.find(item => Number(item.scene_number) === Number(sceneNumber));
+    if (!scene) return json(response, 404, { error: 'Scene not found.' });
+    
+    // Budget check
+    const budget = await budgetService.getBudgetState();
+    if (Number(budget.spent) + Number(budget.imageCostCeiling) > Number(budget.limit) - Number(budget.reserve)) {
+      return json(response, 402, { error: 'Hard budget guard blocked image generation to preserve the configured reserve.' });
+    }
+    
+    const asset = await generateSceneImage({ 
+      prompt: scene.image_prompt, 
+      shortId: short.id, 
+      sceneNumber: scene.scene_number 
+    });
+    
+    // Record budget usage
+    if (shortsService.databaseService) {
+      await shortsService.databaseService.recordBudgetUsage('image_generation', 'openrouter', asset.cost, {
+        model: asset.model,
+        shortId,
+        sceneNumber
+      });
+    }
+    
+    short.assets = [...(short.assets || []).filter(item => item.sceneNumber !== scene.scene_number), 
+      { ...asset, sceneNumber: scene.scene_number, createdAt: new Date().toISOString() }];
+    
+    if (shortsService.databaseService) {
+      await shortsService.databaseService.saveShort(short);
+    } else {
+      const state = await shortsService.stateManager.getState();
+      state.budget.spent = Number(state.budget.spent) + asset.cost;
+      short.updatedAt = new Date().toISOString();
+      await shortsService.stateManager.saveState(state);
+    }
+    
+    broadcast('short.updated', short);
+    return json(response, 201, asset);
+  } catch (error) {
+    return json(response, error.statusCode || 500, { error: error.message });
+  }
+}
+export async function generateAudioHandler(request, response, { shortsService, musicService, params }) {
+  try {
+    const { shortId } = params;
+    const short = await shortsService.getShort(shortId);
+    
+    if (!short?.script) {
+      return json(response, 409, { error: 'Generate a script before narration.' });
+    }
+    
+    // Generate narration
+    short.audio = await generateNarration({ text: short.script.narration, shortId: short.id });
+    
+    // Get music based on content type and mood settings
+    const musicMode = short.musicMode || 'Library'; // From UI setting
+    const musicMood = short.musicMood || 'Dark / Cinematic';
+    const duration = short.duration || 60;
+    
+    try {
+      const musicResult = await musicService.getMusicForShort({
+        mood: musicMood,
+        durationSeconds: duration,
+        shortId: short.id,
+        mode: musicMode.toLowerCase(),
+        sceneContext: short.topic || ''
+      });
+      
+      short.music = {
+        ...musicResult,
+        selectedAt: new Date().toISOString(),
+        mood: musicMood,
+        mode: musicMode
+      };
+      
+      console.log(`🎵 Added ${musicResult.type} music (${musicMood}) to Short: ${short.script.title}`);
+    } catch (musicError) {
+      console.warn('Music generation/selection failed:', musicError.message);
+      // Continue without music - it's not critical
+      short.music = {
+        type: 'none',
+        error: musicError.message,
+        mood: musicMood,
+        mode: musicMode
+      };
+    }
+    
+    short.updatedAt = new Date().toISOString();
+    
+    if (shortsService.databaseService) {
+      await shortsService.databaseService.saveShort(short);
+    } else {
+      const state = await shortsService.stateManager.getState();
+      await shortsService.stateManager.saveState(state);
+    }
+    
+    broadcast('short.updated', short);
+    
+    return json(response, 201, {
+      audio: short.audio,
+      music: short.music,
+      message: short.music.type === 'none' ? 'Audio generated, music failed' : 'Audio and music ready'
+    });
+  } catch (error) {
+    return json(response, error.statusCode || 500, { error: error.message });
+  }
+}
+
+export async function renderHandler(request, response, { shortsService, params }) {
+  try {
+    const { shortId } = params;
+    const short = await shortsService.getShort(shortId);
+    
+    if (!(short.assets || []).length) {
+      return json(response, 409, { error: 'Generate at least one image before rendering. Audio is optional.' });
+    }
+    
+    const images = short.script.scenes.map(scene => 
+      short.assets.find(asset => asset.sceneNumber === scene.scene_number)?.key
+    ).filter(Boolean);
+    
+    if (images.length === 0) {
+      return json(response, 409, { error: 'No scene images available for rendering.' });
+    }
+    
+    // Prepare enhanced rendering data
+    const renderData = {
+      imageKeys: images,
+      audioKey: short.audio?.key,
+      musicKey: short.music?.asset?.key || short.music?.track?.filePath, 
+      shortId: short.id,
+      scenes: short.script.scenes || [],
+      scriptData: {
+        title: short.script.title,
+        hook: short.script.hook,
+        topic: short.topic,
+        contentType: short.contentType
+      },
+      style: getVideoStyle(short.contentType, short.topic),
+      onProgress: (progress) => {
+        // Real-time progress updates via SSE
+        broadcast('render.progress', { 
+          shortId: short.id, 
+          progress,
+          stage: 'rendering'
+        });
+      }
+    };
+    
+    console.log('🎬 Starting cinematic render with:', {
+      scenes: images.length,
+      style: renderData.style,
+      hasAudio: Boolean(renderData.audioKey),
+      hasMusic: Boolean(renderData.musicKey),
+      title: renderData.scriptData.title
+    });
+    
+    short.video = await renderVerticalShort(renderData);
+    short.updatedAt = new Date().toISOString();
+    
+    if (shortsService.databaseService) {
+      await shortsService.databaseService.saveShort(short);
+    } else {
+      const state = await shortsService.stateManager.getState();
+      await shortsService.stateManager.saveState(state);
+    }
+    
+    broadcast('short.updated', short);
+    
+    const effectsUsed = short.video.effects || [];
+    console.log(`✅ Cinematic render complete with effects: ${effectsUsed.join(', ')}`);
+    
+    return json(response, 201, {
+      video: short.video,
+      effects: effectsUsed,
+      message: `Video rendered with ${effectsUsed.length} cinematic effects`
+    });
+  } catch (error) {
+    return json(response, error.statusCode || 500, { error: error.message });
+  }
+}
+
+function getVideoStyle(contentType, topic) {
+  const topicLower = (topic || '').toLowerCase();
+  
+  // Style based on content type and topic
+  if (contentType === 'Upcoming Movie' || contentType === 'Movie Connection') {
+    if (topicLower.includes('action') || topicLower.includes('avengers') || topicLower.includes('war')) {
+      return 'action';
+    }
+    if (topicLower.includes('mystery') || topicLower.includes('strange') || topicLower.includes('multiverse')) {
+      return 'mysterious';
+    }
+    return 'cinematic';
+  }
+  
+  if (contentType === 'Theory' || contentType === 'Ending Explained') {
+    return 'dramatic';
+  }
+  
+  if (contentType === 'Character Explained') {
+    if (topicLower.includes('villain') || topicLower.includes('doom') || topicLower.includes('thanos')) {
+      return 'dark';
+    }
+    return 'heroic';
+  }
+  
+  return 'cinematic'; // Default
+}
+export async function publishHandler(request, response, { shortsService, youtubeService, params }) {
+  try {
+    const { shortId } = params;
+    const short = await shortsService.getShort(shortId);
+    
+    if (!short) return json(response, 404, { error: 'Short not found.' });
+    if (short.qa?.status !== 'QA PASSED') {
+      return json(response, 409, { error: 'Publishing is blocked until factuality QA passes with zero unsupported claims.' });
+    }
+    if (!short.video) {
+      return json(response, 409, { error: 'Render the final video before publishing.' });
+    }
+    
+    // Check YouTube connection
+    const youtubeStatus = await youtubeService.getStatus();
+    if (!youtubeStatus.connected) {
+      return json(response, 409, { error: 'Connect YouTube before publishing.' });
+    }
+    
+    // Get upload request parameters
+    const input = await body(request);
+    
+    try {
+      // Get fresh credentials (automatically refreshes if needed)
+      const credentials = await youtubeService.getUploadCredentials();
+      
+      // Import storage utility
+      const { storage } = await import('../lib/storage.js');
+      
+      console.log(`Publishing Short "${short.script.title}" to YouTube channel: ${youtubeStatus.channelInfo?.title || 'Connected Channel'}`);
+      
+      const upload = await uploadYoutubeShort({ 
+        refreshToken: credentials.refreshToken, 
+        accessToken: credentials.accessToken, 
+        videoPath: storage.path(short.video.key), 
+        title: short.script.title, 
+        description: short.script.youtube_description, 
+        tags: short.script.hashtags, 
+        privacyStatus: input.visibility || 'private', 
+        publishAt: input.publishAt || undefined 
+      });
+      
+      // Store upload result with channel verification
+      short.youtube = { 
+        id: upload.id, 
+        url: `https://youtu.be/${upload.id}`, 
+        publishedAt: new Date().toISOString(),
+        channelId: upload.channelInfo?.id,
+        channelTitle: upload.channelInfo?.title,
+        privacyStatus: input.visibility || 'private'
+      };
+      short.status = 'PUBLISHED';
+      short.updatedAt = new Date().toISOString();
+      
+      // Save the updated short
+      if (shortsService.databaseService) {
+        await shortsService.databaseService.saveShort(short);
+      } else {
+        const state = await shortsService.stateManager.getState();
+        await shortsService.stateManager.saveState(state);
+      }
+      
+      broadcast('short.updated', short);
+      
+      console.log(`✅ Successfully published "${short.script.title}" to ${upload.channelInfo?.title} (${upload.id})`);
+      
+      return json(response, 201, {
+        ...short.youtube,
+        message: `Successfully published to ${upload.channelInfo?.title}`
+      });
+      
+    } catch (uploadError) {
+      console.error('YouTube upload failed:', uploadError);
+      
+      // Add failure event to short
+      short.events = short.events || [];
+      short.events.push({
+        stage: 'PUBLISH_FAILED',
+        message: uploadError.message,
+        at: new Date().toISOString()
+      });
+      
+      if (shortsService.databaseService) {
+        await shortsService.databaseService.saveShort(short);
+      } else {
+        const state = await shortsService.stateManager.getState();
+        await shortsService.stateManager.saveState(state);
+      }
+      
+      broadcast('short.updated', short);
+      
+      return json(response, 500, { 
+        error: `YouTube upload failed: ${uploadError.message}`,
+        retryable: uploadError.message.includes('token') || uploadError.message.includes('auth')
+      });
+    }
+    
+  } catch (error) {
+    console.error('Publish handler error:', error);
+    return json(response, error.statusCode || 500, { error: error.message });
+  }
+}

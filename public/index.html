@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101015" />
+    <title>Shorts Factory — AI Movie Production</title>
+    
+    <!-- Favicons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#workspace"><span class="brand-mark">▶</span><span>SHORTS<br><em>FACTORY</em></span></a>
+        <div class="connection-strip" aria-label="System connection status">
+          <span><i class="status-dot pending" id="ai-status"></i>AI <b id="ai-label">Setup</b></span>
+          <span><i class="status-dot pending" id="worker-status"></i>Workers <b>Offline</b></span>
+          <span><i class="status-dot pending" id="youtube-status"></i>YouTube <b id="youtube-label">Connect</b></span>
+          <span><i class="status-dot live"></i>Storage <b>Local</b></span>
+        </div>
+        <nav class="top-actions">
+          <button class="text-button" data-action="new-short">＋ New Short</button>
+          <button class="text-button" data-action="batch">Batch</button>
+          <button class="text-button" data-action="queue">Queue <span class="counter">0</span></button>
+          <button class="text-button" data-action="prompt-lab">Prompt Lab</button>
+          <button class="icon-button" title="Settings">⚙</button>
+          <button class="avatar" title="Account">FA</button>
+        </nav>
+      </header>
+
+      <main id="workspace">
+        <section class="hero-header">
+          <div>
+            <p class="eyebrow">PRODUCTION WORKSPACE <span class="sep">/</span> MOVIE SHORTS</p>
+            <h1>Craft a story worth <span>stopping for.</span></h1>
+          </div>
+          <div class="mode-switch" aria-label="Automation mode">
+            <button class="active">Manual</button>
+            <button>Semi-auto</button>
+            <button>Full auto</button>
+          </div>
+          <div class="automation-status manual" id="automation-status">
+            <div class="status-indicator"></div>
+            <span>Manual control active</span>
+          </div>
+        </section>
+
+        <section class="generation-bar panel">
+          <div class="form-block topic-field"><label for="topic">TOPIC</label><input id="topic" value="Avengers: Doomsday" maxlength="180" /></div>
+          <div class="form-block"><label for="content-type">CONTENT TYPE</label><select id="content-type"><option>Upcoming Movie</option><option>Story Explained</option><option>Character Explained</option><option>Timeline</option><option>Ending Explained</option><option>Theory</option><option>Movie Connection</option><option>Plot Summary</option></select></div>
+          <button class="generate-button" id="generate"><span>✦</span> GENERATE SHORT</button>
+          <button class="batch-button" data-action="batch">GENERATE BATCH</button>
+          <div class="presets"><span>QUICK START</span><button>Story</button><button>Character</button><button>Timeline</button><button>Ending</button><button>Theory</button></div>
+        </section>
+
+        <!-- Progress Pipeline -->
+        <section class="pipeline-progress" id="pipeline-progress" style="display: none;">
+          <div class="pipeline-header">
+            <h3>Production Pipeline</h3>
+            <div class="pipeline-status" id="pipeline-status">Initializing...</div>
+          </div>
+          <div class="progress-steps">
+            <div class="progress-step" data-step="research">
+              <div class="step-icon">⌕</div>
+              <div class="step-content">
+                <div class="step-title">Research</div>
+                <div class="step-description">Gathering evidence and sources</div>
+                <div class="step-progress"><div class="progress-bar"><div class="progress-fill"></div></div></div>
+              </div>
+              <div class="step-status">pending</div>
+            </div>
+            <div class="progress-step" data-step="script">
+              <div class="step-icon">✍</div>
+              <div class="step-content">
+                <div class="step-title">Script</div>
+                <div class="step-description">Generating evidence-based narrative</div>
+                <div class="step-progress"><div class="progress-bar"><div class="progress-fill"></div></div></div>
+              </div>
+              <div class="step-status">pending</div>
+            </div>
+            <div class="progress-step" data-step="images">
+              <div class="step-icon">🎨</div>
+              <div class="step-content">
+                <div class="step-title">Images</div>
+                <div class="step-description">Creating scene visuals</div>
+                <div class="step-progress"><div class="progress-bar"><div class="progress-fill"></div></div></div>
+              </div>
+              <div class="step-status">pending</div>
+            </div>
+            <div class="progress-step" data-step="audio">
+              <div class="step-icon">🎤</div>
+              <div class="step-content">
+                <div class="step-title">Audio</div>
+                <div class="step-description">Generating narration</div>
+                <div class="step-progress"><div class="progress-bar"><div class="progress-fill"></div></div></div>
+              </div>
+              <div class="step-status">pending</div>
+            </div>
+            <div class="progress-step" data-step="music">
+              <div class="step-icon">🎵</div>
+              <div class="step-content">
+                <div class="step-title">Music</div>
+                <div class="step-description">Adding background score</div>
+                <div class="step-progress"><div class="progress-bar"><div class="progress-fill"></div></div></div>
+              </div>
+              <div class="step-status">pending</div>
+            </div>
+            <div class="progress-step" data-step="render">
+              <div class="step-icon">🎬</div>
+              <div class="step-content">
+                <div class="step-title">Render</div>
+                <div class="step-description">Assembling final video</div>
+                <div class="step-progress"><div class="progress-bar"><div class="progress-fill"></div></div></div>
+              </div>
+              <div class="step-status">pending</div>
+            </div>
+            <div class="progress-step" data-step="publish">
+              <div class="step-icon">📺</div>
+              <div class="step-content">
+                <div class="step-title">Publish</div>
+                <div class="step-description">Uploading to Marvel Central</div>
+                <div class="step-progress"><div class="progress-bar"><div class="progress-fill"></div></div></div>
+              </div>
+              <div class="step-status">pending</div>
+            </div>
+          </div>
+        </section>
+
+        <div class="notice" id="setup-notice"><span>◌</span><div><b>Provider setup required for generation.</b> Add `OPENROUTER_API_KEY` to `.env` and restart. The workspace stays fully editable while you configure providers.</div><button data-action="show-setup">View setup</button></div>
+
+        <section class="workspace-grid">
+          <aside class="settings-panel panel">
+            <div class="panel-heading"><div><p class="eyebrow">01 / CONTROLS</p><h2>Content settings</h2></div><button class="mini-icon">⌄</button></div>
+            <div class="settings-scroll">
+              <div class="setting-row"><label>Duration</label><select id="duration"><option value="60">60 sec</option><option value="45">45 sec</option><option value="30">30 sec</option></select></div>
+              <div class="setting-row"><label>Language</label><select><option>English</option><option>Spanish</option><option>Hindi</option></select></div>
+              <div class="setting-row"><label>Tone</label><select><option>Intriguing</option><option>Factual</option><option>Dramatic</option></select></div>
+              <div class="setting-row"><label>Pacing</label><select><option>Fast cuts</option><option>Measured</option><option>High energy</option></select></div>
+              <div class="setting-row"><label>Visual style</label><select id="visual-style"><option>Cinematic</option><option>Action</option><option>Dramatic</option><option>Mysterious</option><option>Heroic</option></select></div>
+              <div class="setting-row"><label>Text effects</label><select id="text-effects"><option>Kinetic Bold</option><option>Marvel Style</option><option>Minimal Clean</option><option>Comic Book</option></select></div>
+              <div class="setting-row"><label>Transitions</label><select id="transitions"><option>Cross Fade</option><option>Wipe Left</option><option>Dissolve</option><option>Slide Right</option></select></div>
+              <div class="setting-row"><label>Narrator</label><select><option>Atlas — warm</option><option>Nova — dramatic</option><option>Custom voice</option></select></div>
+              <div class="setting-row"><label>Script model</label><select><option>OpenRouter default</option><option>Choose in Prompt Lab</option></select></div>
+              <div class="setting-row"><label>Image model</label><select><option>Configure server-side</option></select></div>
+              <div class="setting-row"><label>Scenes</label><select><option>10 scenes</option><option>8 scenes</option><option>12 scenes</option></select></div>
+              <div class="setting-row"><label>Subtitles</label><select><option>Bold kinetic</option><option>Minimal</option><option>Documentary</option></select></div>
+              <div class="setting-row"><label>Truth mode</label><select id="truth-mode"><option value="FACTUAL">Factual</option><option value="FACTUAL_REPORTED">Factual + reported</option><option value="THEORY">Theory</option><option value="CREATIVE">Creative</option></select></div>
+              <div class="setting-row"><label>Min. sources</label><select id="minimum-sources"><option value="2">2 sources</option><option value="3">3 sources</option><option value="1">1 source</option></select></div>
+              <div class="setting-row"><label>Music mode</label><select id="music-mode"><option>Library</option><option>AI Generate</option><option>Random</option><option>None</option></select></div>
+              <div class="setting-row"><label>Music mood</label><select id="music-mood"><option>Dark / Cinematic</option><option>Epic / Action</option><option>Suspense</option><option>Emotional</option><option>Sci-fi</option><option>Mysterious</option></select></div>
+              <div class="setting-row music-preview" id="music-preview" style="display: none;">
+                <label>Current Music</label>
+                <div class="music-player">
+                  <button class="play-btn" id="music-play">▶</button>
+                  <span class="music-info" id="music-info">No music selected</span>
+                  <button class="regenerate-btn" id="music-regenerate">🔄</button>
+                </div>
+              </div>
+              <div class="setting-row"><label>Output</label><span class="locked-value">9:16 · 1080 × 1920</span></div>
+            </div>
+            <div class="cost-card"><p>EXPERIMENT BUDGET <span>ⓘ</span></p><strong id="budget-remaining">$20.00</strong><div class="budget-line"><span>Spent <b id="budget-spent">$0.00</b></span><span>Per Short <b id="budget-short">$0.040</b></span></div><small id="budget-plan">Upcoming Movie: 3 images planned</small></div>
+          </aside>
+
+          <section class="script-panel panel">
+            <div class="panel-heading"><div><p class="eyebrow">02 / EDIT</p><h2>Script <span class="draft-pill">DRAFT</span></h2></div><div class="toolbar"><button title="Improve hook">✦</button><button title="Shorten">↙</button><button title="Expand">↗</button><button title="More options">•••</button></div></div>
+            <div class="script-meta"><span>⌁ 00:60 estimate</span><span>0 words</span><span class="model-chip">◉ Awaiting model</span></div>
+            <div class="hook-box"><p>HOOK</p><textarea id="hook" placeholder="Your hook appears here after script generation."></textarea></div>
+            <div class="script-editor"><p>NARRATION</p><textarea id="narration" placeholder="Create a structured script to begin editing narration, scenes, captions, and visual direction here."></textarea></div>
+            <div class="script-footer"><span>Structured JSON · Schema validation on</span><button class="link-button" data-action="prompt-lab">Edit script prompt →</button></div>
+          </section>
+
+          <aside class="research-panel panel">
+            <div class="panel-heading"><div><p class="eyebrow">03 / VERIFY</p><h2>Research</h2></div><button class="compact-button" id="research-button">Research</button></div>
+            <div class="research-empty" id="research-empty"><div class="orb">⌕</div><h3>Evidence before story</h3><p>Scripts only receive structured, cited facts. Unsupported claims stop before they can reach publishing.</p><button class="outline-button" id="research-outline">ADD EVIDENCE</button></div>
+            <div class="research-legend"><span><i class="legend confirmed"></i>Confirmed</span><span><i class="legend reported"></i>Reported</span><span><i class="legend rumor"></i>Rumored</span></div>
+          </aside>
+        </section>
+
+        <section class="timeline-section panel">
+          <div class="panel-heading"><div><p class="eyebrow">04 / DIRECT</p><h2>Scene timeline</h2></div><div class="timeline-actions"><span>0 / 10 scenes</span><button class="compact-button">＋ Scene</button></div></div>
+          <div class="timeline-empty" id="scene-timeline"><div class="scene-placeholder">01</div><div class="scene-placeholder">02</div><div class="scene-placeholder">03</div><div class="scene-placeholder">04</div><div class="scene-placeholder">05</div><div class="scene-placeholder">06</div><div class="scene-placeholder">07</div><div class="scene-placeholder">08</div><div class="scene-placeholder">09</div><div class="scene-placeholder">10</div><p>Generated scenes land here. Reorder, edit a prompt, or regenerate individual images without disturbing the rest of the Short.</p></div>
+        </section>
+
+        <section class="fact-gate panel">
+          <div class="panel-heading"><div><p class="eyebrow">EDITORIAL GATE / REQUIRED</p><h2>Factuality review <span class="draft-pill">AWAITING EVIDENCE</span></h2></div><button class="outline-button" id="open-evidence">MANAGE FACTS</button></div>
+          <div class="fact-gate-content"><div class="factuality-score"><span>FACTUALITY SCORE</span><strong>—</strong><div class="score-track"><i></i></div><small>Scripts must score 100% with zero unsupported claims.</small></div><div class="gate-rules"><p><b>FACTUAL MODE</b> only accepts confirmed information as fact.</p><p><b>REPORTED / RUMORED / THEORY</b> must be explicitly framed in narration.</p><p><b>UNKNOWN</b> is excluded. Automatic publishing stays blocked until QA passes.</p></div></div>
+        </section>
+
+        <section class="lower-grid">
+          <section class="preview-panel panel">
+            <div class="panel-heading"><div><p class="eyebrow">05 / REVIEW</p><h2>Video preview</h2></div><div><button class="compact-button">DRAFT</button><button class="compact-button muted">FINAL</button></div></div>
+          <div class="preview-stage"><div class="phone"><div class="phone-top"><span>◉ 9:41</span><span>•••</span></div><div class="preview-empty"><span class="film-icon">▣</span><h3>Render preview</h3><p>Scene images, narration, captions, and music are assembled here.</p></div><div class="caption-preview">YOUR CAPTIONS<br />STAY EDITABLE</div><div class="player-controls"><button>▶</button><span>00:00</span><div class="scrubber"><i></i></div><span>01:00</span><button>⌗</button></div></div><div class="preview-side"><p>OUTPUT</p><strong>1080 × 1920</strong><span>H.264 · AAC</span><p>RENDER STATUS</p><strong class="waiting">Awaiting scenes</strong><button class="outline-button" id="generate-audio">GENERATE VOICE</button><button class="outline-button" id="render-draft">RENDER DRAFT</button></div></div>
+          </section>
+          <aside class="inspector-panel panel">
+            <div class="inspector-tabs"><button class="active">Prompt</button><button>Character bible</button><button>Captions</button></div>
+            <div class="inspector-content"><p class="eyebrow">SCENE DIRECTOR / V3</p><h2>Make every frame intentional.</h2><p>Scene prompts combine your visual style, the character bible, and timed narration. Text overlays remain separate for a clean render.</p><div class="prompt-preview"><span>IMAGE PROMPT</span><code>Awaiting scene selection…</code></div><button class="outline-button" data-action="prompt-lab">OPEN PROMPT LAB</button></div>
+          </aside>
+        </section>
+
+        <section class="publish-section panel">
+          <div class="panel-heading"><div><p class="eyebrow">06 / RELEASE</p><h2>YouTube delivery <span class="draft-pill" id="youtube-connection-status">NOT CONNECTED</span></h2></div><button class="outline-button" id="youtube-connect-btn">CONNECT CHANNEL</button></div>
+          <div class="youtube-connection-info" id="youtube-info" style="display: none;">
+            <div class="youtube-channel-card">
+              <div class="channel-details">
+                <div class="channel-header">
+                  <img id="channel-thumbnail" src="" alt="Channel thumbnail" class="channel-avatar">
+                  <div>
+                    <h3 id="channel-title">Loading...</h3>
+                    <p id="channel-subscribers">0 subscribers</p>
+                  </div>
+                </div>
+                <div class="upload-destination">
+                  <p><strong>Upload destination:</strong></p>
+                  <p id="upload-destination-name">Loading...</p>
+                  <p class="channel-id">ID: <span id="channel-id">Loading...</span></p>
+                </div>
+                <div class="connection-actions">
+                  <button class="text-button" id="refresh-channel-info">↻ Refresh Info</button>
+                  <button class="text-button danger" id="disconnect-youtube">Disconnect</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="publish-grid"><div class="metadata"><label>TITLE</label><input id="youtube-title" placeholder="AI-generated title will appear here" /><label>DESCRIPTION</label><textarea placeholder="Description, credits, and source context…"></textarea><div class="hashtags"><span>#Marvel</span><span>#Avengers</span><span>＋ Add tag</span></div></div><div class="schedule-card"><p>VISIBILITY</p><div class="visibility-buttons"><button class="active">Private</button><button>Unlisted</button><button>Public</button></div><p>PUBLISHING</p><div class="schedule-choice"><button class="active">Publish now</button><button>Schedule</button></div><div class="time-slots"><span>TODAY</span><button>09:00</button><button>12:00</button><button class="pending">15:00</button><button class="pending">18:00</button></div><button class="publish-button">PUBLISH BLOCKED <span>⚑</span></button></div></div>
+        </section>
+      </main>
+      <footer class="queue-bar"><div class="queue-label"><span class="queue-dot"></span><b>PRODUCTION QUEUE</b><span id="queue-count">No active jobs</span></div><div class="pipeline"><span>Research</span><i></i><span>Script</span><i></i><span>Scenes</span><i></i><span>Images</span><i></i><span>Voice</span><i></i><span>Render</span><i></i><span>QA</span><i></i><span>Publish</span></div><button data-action="queue">View queue →</button></footer>
+    </div>
+
+    <dialog id="prompt-dialog"><div class="dialog-header"><div><p class="eyebrow">PROMPT LAB</p><h2>Versioned production prompts</h2></div><button class="close-dialog">×</button></div><div class="dialog-body"><aside id="prompt-list" class="prompt-list"></aside><section class="prompt-editor"><div class="prompt-editor-top"><div><label for="prompt-select">TEMPLATE</label><select id="prompt-select"></select></div><span class="version-badge" id="prompt-version">v1 CURRENT</span></div><label for="prompt-content">EDITABLE TEMPLATE</label><textarea id="prompt-content"></textarea><div class="variables"><span>INSERT VARIABLE</span><button>{{topic}}</button><button>{{content_type}}</button><button>{{research}}</button><button>{{script}}</button><button>{{scene}}</button></div><div class="prompt-actions"><button class="outline-button" id="test-prompt">TEST PROMPT</button><span id="prompt-message"></span><button class="generate-button small" id="save-prompt">SAVE NEW VERSION</button></div></section></div></dialog>
+    <dialog id="setup-dialog"><div class="dialog-header"><div><p class="eyebrow">PROVIDER SETUP</p><h2>Connect the production pipeline</h2></div><button class="close-dialog">×</button></div><div class="setup-content"><ol><li>Create `.env` from `.env.example`.</li><li>Add `OPENROUTER_API_KEY` and choose `OPENROUTER_MODEL`.</li><li>Restart with `npm run dev`.</li><li>Configure image, TTS, FFmpeg, PostgreSQL, Redis, and YouTube before production publishing.</li></ol><p>Your keys are only read by the backend; they are never sent to this page.</p></div></dialog>
+    <dialog id="evidence-dialog"><div class="dialog-header"><div><p class="eyebrow">FACT DATABASE</p><h2>Evidence package</h2></div><button class="close-dialog">×</button></div><div class="setup-content"><p>Evidence is saved to the current Short. A confirmed claim requires at least two cited Tier 1–3 sources by default.</p><label class="evidence-label">SOURCES (ONE PER LINE: title | URL | tier)</label><textarea id="evidence-sources" placeholder="Marvel Studios announcement | https://www.marvel.com/... | 1"></textarea><label class="evidence-label">FACTS (ONE PER LINE: statement | classification | source titles)</label><textarea id="evidence-facts" placeholder="Avengers: Doomsday is an upcoming Marvel film | CONFIRMED | Marvel Studios announcement"></textarea><button class="generate-button" id="save-evidence">SAVE EVIDENCE PACKAGE</button><span id="evidence-message"></span></div></dialog>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,62 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: development
+      DATABASE_URL: postgresql://shorts_factory:shorts_factory@postgres:5432/shorts_factory
+      REDIS_URL: redis://redis:6379
+      STORAGE_PATH: /app/storage
+    env_file: .env
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - generated_assets:/app/storage
+    command: npm run dev:hot
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+  worker:
+    build: .
+    command: npm run worker:dev
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://shorts_factory:shorts_factory@postgres:5432/shorts_factory
+      REDIS_URL: redis://redis:6379
+      STORAGE_PATH: /app/storage
+    env_file: .env
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - generated_assets:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: shorts_factory
+      POSTGRES_USER: shorts_factory
+      POSTGRES_PASSWORD: shorts_factory
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shorts_factory -d shorts_factory"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+volumes:
+  generated_assets:
+  postgres_data:
+  redis_data:

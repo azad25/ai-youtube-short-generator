@@ -1,0 +1,34 @@
+{
+  "name": "shorts-factory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "dev:hot": "node --watch-path=./lib --watch-path=./routes --watch-path=./public server.js",
+    "worker": "node worker.js",
+    "worker:dev": "node --watch-path=./lib --watch-path=./routes worker.js",
+    "test": "node --test",
+    "build": "tsc --noEmit",
+    "lint": "node --check server.js lib/*.js"
+  },
+  "dependencies": {
+    "@openrouter/ai-sdk-provider": "^1.0.0",
+    "ai": "^5.0.0",
+    "bullmq": "^5.0.0",
+    "googleapis": "^144.0.0",
+    "ioredis": "^5.0.0",
+    "node-cron": "^4.6.0",
+    "node-fetch": "^3.3.2",
+    "pg": "^8.0.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
