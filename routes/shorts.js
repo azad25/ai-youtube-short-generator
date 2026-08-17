@@ -287,32 +287,40 @@ REQUIREMENTS:
 - Style: ${short.style || 'Cinematic'}
 - Truth Mode: ${short.truthMode}
 - Language: ${short.language || 'English'}
+- Target: Marvel fans who want detailed, engaging content
 
 CONTENT GUIDELINES:
-- Hook viewers in the first 3 seconds
+- Hook viewers in the first 3 seconds with exciting revelation
+- Each scene should tell a story like a small paragraph
 - Use evidence-based facts only
-- Create visual scenes perfect for image generation
-- Include compelling narration
+- Create visual scenes perfect for Marvel character/scene generation
+- Include compelling narration that builds excitement
 - End with strong conclusion/cliffhanger
 - Make it suitable for Marvel Central YouTube channel
+
+SCENE REQUIREMENTS:
+- Each scene should be 6-10 seconds long
+- Visual descriptions must be specific to actual Marvel characters, locations, and scenes
+- Image prompts should describe real Marvel movie-style cinematography
+- Include character names, specific actions, and movie-quality details
 
 ${evidenceContext}
 
 RESPONSE FORMAT (JSON):
 {
   "title": "YouTube-ready title under 60 characters",
-  "hook": "Opening hook (3-5 seconds)",
-  "narration": "Complete narration script",
-  "youtube_description": "YouTube description with hashtags",
-  "hashtags": ["Marvel", "MCU", "Avengers"],
+  "hook": "Opening hook that grabs attention (3-5 seconds)",
+  "narration": "Complete narration script with dramatic storytelling",
+  "youtube_description": "YouTube description with hashtags and compelling text",
+  "hashtags": ["Marvel", "MCU", "Avengers", "SecretWars"],
   "scenes": [
     {
       "scene_number": 1,
       "start_time": 0,
-      "end_time": 6,
-      "caption": "Scene text overlay",
-      "visual_description": "Detailed description for image generation",
-      "image_prompt": "Cinematic image prompt for AI generation"
+      "end_time": 8,
+      "caption": "Scene text overlay for viewers",
+      "visual_description": "Detailed paragraph describing the Marvel scene like a movie summary",
+      "image_prompt": "Photorealistic Marvel movie scene: [specific character name] in [specific location] doing [specific action], cinematic lighting, movie quality, detailed costume, recognizable Marvel character design"
     }
   ],
   "claims": [
@@ -324,7 +332,17 @@ RESPONSE FORMAT (JSON):
   ]
 }
 
-Generate the script now:`;
+EXAMPLE SCENE FORMAT:
+{
+  "scene_number": 1,
+  "start_time": 0,
+  "end_time": 8,
+  "caption": "The Multiverse Begins to Collapse",
+  "visual_description": "In this opening scene, we witness the catastrophic moment when multiple realities begin converging. Doctor Strange stands atop the Sanctum Sanctorum, his cape billowing as reality fractures around him like broken glass. The sky above New York City splits into multiple dimensions, showing glimpses of different Marvel universes colliding. Strange's expression shows both determination and concern as he realizes the scale of the threat approaching.",
+  "image_prompt": "Photorealistic Marvel movie scene: Doctor Strange in his red Cloak of Levitation standing on top of the Sanctum Sanctorum building, arms raised casting golden mystical energy, New York City skyline in background with reality fracturing like broken glass showing multiple dimensions, dark stormy sky, cinematic lighting, movie quality, Benedict Cumberbatch likeness"
+}
+
+Generate the script now with movie-quality Marvel scenes:`
   }
 
   parseGeneratedScript(content, short) {

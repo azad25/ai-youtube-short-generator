@@ -5,7 +5,12 @@ export function configured() {
     openRouter: Boolean(process.env.OPENROUTER_API_KEY),
     imageModel: Boolean(process.env.OPENROUTER_IMAGE_MODEL),
     helperModel: Boolean(process.env.OPENROUTER_HELPER_MODEL),
-    tts: Boolean(process.env.TTS_PROVIDER && process.env.TTS_API_KEY),
+    tts: {
+      enabled: Boolean(process.env.TTS_PROVIDER && process.env.TTS_API_KEY),
+      provider: process.env.TTS_PROVIDER || 'none',
+      fishConfigured: Boolean(process.env.FISH_AUDIO_API_KEY),
+      elevenlabsConfigured: Boolean(process.env.TTS_API_KEY && process.env.TTS_PROVIDER === 'elevenlabs')
+    },
     youtube: Boolean(process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET),
     database: Boolean(process.env.DATABASE_URL),
     redis: Boolean(process.env.REDIS_URL),
