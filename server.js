@@ -17,6 +17,7 @@ import {
   ShortsService, 
   getShortsHandler,
   getShortHandler, 
+  getShortVideoHandler,
   createShortHandler, 
   researchHandler,
   getFactsHandler,
@@ -166,6 +167,7 @@ const authRoutes = [
   // Shorts management
   { method: 'GET', pattern: '/api/shorts', handler: getShortsHandler },
   { method: 'GET', pattern: /^\/api\/shorts\/([^/]+)$/, handler: getShortHandler },
+  { method: 'GET', pattern: /^\/api\/shorts\/([^/]+)\/video$/, handler: getShortVideoHandler },
   { method: 'POST', pattern: '/api/shorts', handler: createShortHandler },
   { method: 'POST', pattern: /^\/api\/shorts\/([^/]+)\/research$/, handler: researchHandler },
   { method: 'GET', pattern: /^\/api\/shorts\/([^/]+)\/facts$/, handler: getFactsHandler },

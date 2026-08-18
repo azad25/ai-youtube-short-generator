@@ -4,8 +4,11 @@ const state = {
   activeShort: null, 
   budget: null, 
   youtube: null,
+  shorts: [],
+  scheduler: null,
   automationMode: 'Manual' // Track current automation mode
 };
+const ACTIVE_QUEUE_STATUSES = new Set(['QUEUED', 'GENERATING_SCRIPT', 'GENERATING_IMAGES', 'GENERATING_AUDIO', 'RENDERING', 'QA', 'READY']);
 const $ = (selector) => document.querySelector(selector);
 const api = async (url, options = {}) => {
   const response = await fetch(url, { headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }, ...options });
@@ -25,6 +28,53 @@ function formatSubscriberCount(count) {
   if (count >= 1000000) return Math.floor(count / 1000000) + 'M';
   if (count >= 1000) return Math.floor(count / 1000) + 'K';
   return count.toString();
+}
+
+function escapeHtml(value = '') {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatStatusLabel(status = 'UNKNOWN') {
+  return String(status)
+    .toLowerCase()
+    .split('_')
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function formatDateTime(value) {
+  if (!value) return 'Unknown time';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Unknown time';
+  return date.toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+}
+
+function getStatusTone(status = '') {
+  if (status === 'PUBLISHED') return 'live';
+  if (status === 'FAILED' || status === 'PUBLISH_FAILED') return 'error';
+  return 'pending';
+}
+
+function getShortTitle(short) {
+  return short?.script?.title || short?.topic || 'Untitled Short';
+}
+
+function getGeneratedVideoUrl(short) {
+  return short?.video?.key ? `/api/shorts/${short.id}/video` : '';
+}
+
+function getYouTubeThumbnail(short) {
+  return short?.youtube?.id ? `https://i.ytimg.com/vi/${short.youtube.id}/hqdefault.jpg` : '';
 }
 
 // Helper functions for the generation workflow
@@ -353,6 +403,215 @@ async function loadBudget() {
   $('#budget-spent').textContent = `$${budget.spent.toFixed(2)}`;
   $('#budget-short').textContent = `$${budget.allowedPerShort.toFixed(3)}`;
   $('#budget-plan').textContent = `${$('#content-type').value}: ${budget.plan.imageCount} images planned · ${budget.plan.reason}`;
+}
+
+function renderShortStatusChips(shorts) {
+  const container = $('#short-status-chips');
+  if (!container) return;
+
+  if (!shorts.length) {
+    container.innerHTML = '<div class="status-empty">No shorts yet. Create one and the status breakdown will appear here.</div>';
+    return;
+  }
+
+  const counts = shorts.reduce((acc, short) => {
+    const status = short.status || 'UNKNOWN';
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, {});
+
+  container.innerHTML = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([status, count]) => `
+      <span class="status-chip ${getStatusTone(status)}">
+        ${escapeHtml(formatStatusLabel(status))} <b>${count}</b>
+      </span>
+    `)
+    .join('');
+}
+
+function renderActiveQueueList(activeQueue) {
+  const container = $('#active-queue-list');
+  if (!container) return;
+
+  if (!activeQueue.length) {
+    container.innerHTML = '<div class="status-empty">No active queue items right now.</div>';
+    return;
+  }
+
+  container.innerHTML = activeQueue.slice(0, 6).map((short) => `
+    <div class="status-row">
+      <strong>${escapeHtml(getShortTitle(short))}</strong>
+      <span>${escapeHtml(formatStatusLabel(short.status || 'QUEUED'))}</span>
+      <small>${escapeHtml(formatDateTime(short.updatedAt || short.createdAt))}</small>
+    </div>
+  `).join('');
+}
+
+function renderTaskList(tasks, isActive) {
+  const container = $('#active-task-list');
+  if (!container) return;
+
+  if (!tasks.length) {
+    container.innerHTML = `<div class="status-empty">${isActive ? 'Scheduler is active but no named tasks were reported.' : 'No active scheduler tasks.'}</div>`;
+    return;
+  }
+
+  container.innerHTML = tasks.map((task) => `
+    <div class="status-row">
+      <strong>${escapeHtml(formatStatusLabel(task))}</strong>
+      <span>${isActive ? 'Running' : 'Idle'}</span>
+      <small>Scheduler</small>
+    </div>
+  `).join('');
+}
+
+function renderGeneratedVideos(shorts) {
+  const container = $('#generated-video-list');
+  if (!container) return;
+
+  if (!shorts.length) {
+    container.innerHTML = '<div class="media-empty">Rendered videos will appear here once a short finishes the video pipeline.</div>';
+    return;
+  }
+
+  container.innerHTML = shorts
+    .sort((a, b) => new Date(b.video?.createdAt || b.updatedAt || b.createdAt) - new Date(a.video?.createdAt || a.updatedAt || a.createdAt))
+    .slice(0, 6)
+    .map((short) => {
+      const videoUrl = getGeneratedVideoUrl(short);
+      const effectsCount = short.video?.effects?.length || 0;
+      return `
+        <article class="media-card">
+          <video controls preload="metadata" src="${escapeHtml(videoUrl)}"></video>
+          <div class="media-card-body">
+            <div class="media-card-top">
+              <h3 class="media-card-title">${escapeHtml(getShortTitle(short))}</h3>
+              <span class="draft-pill">${escapeHtml(formatStatusLabel(short.status || 'READY'))}</span>
+            </div>
+            <p class="media-card-meta">
+              Rendered ${escapeHtml(formatDateTime(short.video?.createdAt || short.updatedAt || short.createdAt))}<br>
+              ${escapeHtml(`${short.video?.width || 1080}x${short.video?.height || 1920}`)} · ${escapeHtml(short.video?.format || 'mp4')} · ${effectsCount} effect${effectsCount === 1 ? '' : 's'}
+            </p>
+            <div class="media-card-actions">
+              <a class="media-card-link" href="${escapeHtml(videoUrl)}" target="_blank" rel="noopener noreferrer">Open Render</a>
+              ${short.youtube?.url ? `<a class="media-card-link" href="${escapeHtml(short.youtube.url)}" target="_blank" rel="noopener noreferrer">View Upload</a>` : ''}
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join('');
+}
+
+function renderUploadedVideos(shorts) {
+  const container = $('#uploaded-video-list');
+  if (!container) return;
+
+  if (!shorts.length) {
+    container.innerHTML = '<div class="media-empty">Published channel videos will appear here after a short is uploaded to YouTube.</div>';
+    return;
+  }
+
+  container.innerHTML = shorts
+    .sort((a, b) => new Date(b.youtube?.publishedAt || b.updatedAt || b.createdAt) - new Date(a.youtube?.publishedAt || a.updatedAt || a.createdAt))
+    .slice(0, 6)
+    .map((short) => `
+      <article class="media-card">
+        <img src="${escapeHtml(getYouTubeThumbnail(short))}" alt="${escapeHtml(getShortTitle(short))}" loading="lazy">
+        <div class="media-card-body">
+          <div class="media-card-top">
+            <h3 class="media-card-title">${escapeHtml(getShortTitle(short))}</h3>
+            <span class="draft-pill passed">${escapeHtml(short.youtube?.privacyStatus || 'published').toUpperCase()}</span>
+          </div>
+          <p class="media-card-meta">
+            Uploaded ${escapeHtml(formatDateTime(short.youtube?.publishedAt || short.updatedAt || short.createdAt))}<br>
+            ${escapeHtml(short.youtube?.channelTitle || state.youtube?.channelInfo?.title || 'Connected channel')}
+          </p>
+          <div class="media-card-actions">
+            <a class="media-card-link" href="${escapeHtml(short.youtube?.url || '#')}" target="_blank" rel="noopener noreferrer">Open on YouTube</a>
+            ${short.video?.key ? `<a class="media-card-link" href="${escapeHtml(getGeneratedVideoUrl(short))}" target="_blank" rel="noopener noreferrer">Preview Render</a>` : ''}
+          </div>
+        </div>
+      </article>
+    `)
+    .join('');
+}
+
+function renderOperationsDashboard() {
+  const shorts = Array.isArray(state.shorts) ? state.shorts : [];
+  const schedulerTasks = Array.isArray(state.scheduler?.tasks) ? state.scheduler.tasks : [];
+  const generatedShorts = shorts.filter(short => short.video?.key);
+  const uploadedShorts = shorts.filter(short => short.youtube?.url || short.status === 'PUBLISHED');
+  const activeQueue = shorts.filter(short => ACTIVE_QUEUE_STATUSES.has(short.status));
+
+  $('#generated-count').textContent = String(generatedShorts.length);
+  $('#uploaded-count').textContent = String(uploadedShorts.length);
+  $('#active-queue-count').textContent = String(activeQueue.length);
+  $('#active-task-count').textContent = String(schedulerTasks.length);
+
+  const queueMessage = activeQueue.length ? `${activeQueue.length} active job${activeQueue.length === 1 ? '' : 's'}` : 'No active jobs';
+  $('#queue-count').textContent = queueMessage;
+
+  const queueCounter = document.querySelector('[data-action="queue"] .counter');
+  if (queueCounter) queueCounter.textContent = String(activeQueue.length);
+
+  const workerStatus = $('#worker-status');
+  const workerLabel = workerStatus?.parentElement?.querySelector('b');
+  const workersActive = activeQueue.length > 0 || Boolean(state.scheduler?.active);
+  if (workerStatus) workerStatus.className = `status-dot ${workersActive ? 'live' : 'pending'}`;
+  if (workerLabel) workerLabel.textContent = workersActive ? `${activeQueue.length || schedulerTasks.length} Active` : 'Idle';
+
+  renderShortStatusChips(shorts);
+  renderActiveQueueList(activeQueue);
+  renderTaskList(schedulerTasks, Boolean(state.scheduler?.active));
+  renderGeneratedVideos(generatedShorts);
+  renderUploadedVideos(uploadedShorts);
+}
+
+async function loadOperationsDashboard() {
+  try {
+    const [shorts, scheduler] = await Promise.all([
+      api('/api/shorts'),
+      api('/api/scheduler/status').catch(() => ({ active: false, tasks: [] }))
+    ]);
+
+    state.shorts = Array.isArray(shorts) ? shorts : [];
+    state.scheduler = scheduler || { active: false, tasks: [] };
+    renderOperationsDashboard();
+  } catch (error) {
+    console.error('Failed to load operations dashboard:', error);
+  }
+}
+
+function subscribeToEvents() {
+  if (window.operationsEvents) return;
+
+  const events = new EventSource('/api/events');
+  window.operationsEvents = events;
+
+  events.addEventListener('short.updated', async (event) => {
+    try {
+      const short = JSON.parse(event.data);
+      if (state.activeShort?.id === short.id) {
+        state.activeShort = { ...state.activeShort, ...short };
+      }
+    } catch (error) {
+      console.warn('Failed to parse short update event:', error);
+    }
+
+    loadOperationsDashboard().catch(() => {});
+  });
+
+  events.addEventListener('connected', () => {
+    loadOperationsDashboard().catch(() => {});
+  });
+
+  events.onerror = () => {
+    events.close();
+    window.operationsEvents = null;
+    window.setTimeout(() => subscribeToEvents(), 5000);
+  };
 }
 
 function renderScenes(scenes) {
@@ -1156,8 +1415,10 @@ async function renderVideo() {
   try {
     await simulateProgress('render', 4000); // Simulate video rendering
     
-    await api(`/api/shorts/${state.activeShort.id}/render`, { method: 'POST' });
+    const result = await api(`/api/shorts/${state.activeShort.id}/render`, { method: 'POST' });
+    state.activeShort.video = result.video || result;
     updateStep('render', 'completed', 100, 'Video rendered successfully');
+    loadOperationsDashboard().catch(() => {});
     
   } catch (error) {
     updateStep('render', 'error', 0, error.message);
@@ -1243,6 +1504,7 @@ async function publishToYouTube() {
     setNotice(`<b>✅ Published to ${result.channelTitle || 'YouTube'}!</b> <a href="${result.url}" target="_blank">View video</a>`);
     
     publishBtn.innerHTML = `✅ PUBLISHED TO ${(result.channelTitle || 'YOUTUBE').toUpperCase()}`;
+    loadOperationsDashboard().catch(() => {});
     
   } catch (error) {
     const progressInterval = setInterval(() => {}, 300);
@@ -1373,6 +1635,11 @@ if (musicRegenerateBtn) {
   musicRegenerateBtn.addEventListener('click', regenerateMusic);
 }
 
+const refreshDashboardBtn = $('#refresh-dashboard');
+if (refreshDashboardBtn) {
+  refreshDashboardBtn.addEventListener('click', () => loadOperationsDashboard().catch(() => {}));
+}
+
 // Wire disconnect and refresh buttons (these get added dynamically)
 document.addEventListener('click', (event) => {
   if (event.target.id === 'disconnect-youtube') {
@@ -1401,4 +1668,6 @@ wireDialogControls();
 // Check for URL parameters on page load
 checkUrlParams();
 
-Promise.all([loadHealth(), loadPrompts(), loadBudget(), loadYouTubeStatus()]).catch((error) => setNotice(`<b>Server connection issue.</b> ${error.message}`, true));
+Promise.all([loadHealth(), loadPrompts(), loadBudget(), loadYouTubeStatus(), loadOperationsDashboard()]).catch((error) => setNotice(`<b>Server connection issue.</b> ${error.message}`, true));
+subscribeToEvents();
+window.setInterval(() => loadOperationsDashboard().catch(() => {}), 15000);

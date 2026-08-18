@@ -135,6 +135,45 @@
 
         <div class="notice" id="setup-notice"><span>◌</span><div><b>Provider setup required for generation.</b> Add `OPENROUTER_API_KEY` to `.env` and restart. The workspace stays fully editable while you configure providers.</div><button data-action="show-setup">View setup</button></div>
 
+        <section class="operations-grid">
+          <section class="panel operations-panel">
+            <div class="panel-heading">
+              <div><p class="eyebrow">QUEUE / TASKS / STATUS</p><h2>Production monitor</h2></div>
+              <button class="outline-button" id="refresh-dashboard">REFRESH</button>
+            </div>
+            <div class="operations-metrics">
+              <div class="metric-card"><span>Generated videos</span><strong id="generated-count">0</strong><small>Rendered locally and ready to review</small></div>
+              <div class="metric-card"><span>Uploaded videos</span><strong id="uploaded-count">0</strong><small>Published to the connected YouTube channel</small></div>
+              <div class="metric-card"><span>Active queue</span><strong id="active-queue-count">0</strong><small>Shorts currently queued or processing</small></div>
+              <div class="metric-card"><span>Active tasks</span><strong id="active-task-count">0</strong><small>Scheduler tasks currently running</small></div>
+            </div>
+            <div class="operations-status-grid">
+              <div class="status-card">
+                <p>SHORTS STATUS</p>
+                <div class="status-chip-list" id="short-status-chips"></div>
+              </div>
+              <div class="status-card">
+                <p>ACTIVE QUEUES</p>
+                <div class="status-list" id="active-queue-list"></div>
+              </div>
+              <div class="status-card">
+                <p>ACTIVE TASKS</p>
+                <div class="status-list" id="active-task-list"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel media-library-panel">
+            <div class="panel-heading"><div><p class="eyebrow">GENERATED VIDEOS</p><h2>Rendered shorts</h2></div></div>
+            <div class="media-library-list" id="generated-video-list"></div>
+          </section>
+
+          <section class="panel media-library-panel">
+            <div class="panel-heading"><div><p class="eyebrow">CHANNEL VIDEOS</p><h2>Uploaded to channel</h2></div></div>
+            <div class="media-library-list" id="uploaded-video-list"></div>
+          </section>
+        </section>
+
         <section class="workspace-grid">
           <aside class="settings-panel panel">
             <div class="panel-heading"><div><p class="eyebrow">01 / CONTROLS</p><h2>Content settings</h2></div><button class="mini-icon">⌄</button></div>
