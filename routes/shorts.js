@@ -1,5 +1,6 @@
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
+import path from 'node:path';
 import { json, body } from '../lib/middleware.js';
 import { budgetSnapshot, recommendImagePlan } from '../lib/budget.js';
 import { evidenceIssues, normalizeFact, reviewScriptClaims } from '../lib/factuality.js';
@@ -748,31 +749,99 @@ export async function renderHandler(request, response, { shortsService, params }
       return json(response, 409, { error: 'Generate at least one image before rendering. Audio is optional.' });
     }
 
-    // USE ALL AVAILABLE ASSETS - not just script scenes
+    // FORCE music generation with priority: Suno AI -> Library -> Synthetic
+    console.log('🎵 Marvel Shorts Factory Music Pipeline Starting...');
     
-    // Skip music for now - focus on getting all images + text working
-    // Get music for the video if not already assigned
-    // if (!short.music) {
-    //   try {
-    //     const musicResponse = await fetch(`http://localhost:3000/api/music/library?mood=Epic+%2F+Action&duration=60`);
-    //     if (musicResponse.ok) {
-    //       const musicData = await musicResponse.json();
-    //       short.music = musicData;
-    //       console.log('🎵 Music selected:', musicData.track.name);
-    //     }
-    //   } catch (error) {
-    //     console.warn('Music selection failed, continuing without music:', error.message);
-    //   }
-    // }
+    try {
+      // Step 1: Try Suno AI first (premium option)
+      console.log('🎵 Step 1: Attempting Suno AI music generation...');
+      const musicService = new (await import('../lib/music.js')).MusicService();
+      await musicService.initialize();
+      
+      const aiMusic = await musicService.generateAIMusic({
+        mood: 'Dark / Cinematic',
+        durationSeconds: 24,
+        shortId: short.id,
+        sceneContext: short.topic || 'Dr Doom villain origin story',
+        intensity: 80
+      });
+      
+      short.music = aiMusic;
+      console.log('✅ Suno AI music generated successfully:', aiMusic.track?.filename || 'unknown');
+      
+    } catch (sunoError) {
+      console.warn('🎵 Step 1 Failed - Suno AI error:', sunoError.message);
+      
+      try {
+        // Step 2: Fallback to curated library music
+        console.log('🎵 Step 2: Using curated library music...');
+        const musicService = new (await import('../lib/music.js')).MusicService();
+        await musicService.initialize();
+        
+        const libraryMusic = await musicService.getMusicForShort({
+          mood: 'Dark / Cinematic',
+          durationSeconds: 24,
+          shortId: short.id,
+          mode: 'library'
+        });
+        
+        short.music = libraryMusic;
+        console.log('✅ Library music selected:', libraryMusic.track?.name || 'unknown');
+        
+      } catch (libraryError) {
+        console.warn('🎵 Step 2 Failed - Library error:', libraryError.message);
+        
+        try {
+          // Step 3: Generate synthetic music as final fallback
+          console.log('🎵 Step 3: Generating synthetic fallback music...');
+          const musicService = new (await import('../lib/music.js')).MusicService();
+          const synthPath = path.join(process.cwd(), 'storage', 'temp', `synthetic_doom_${Date.now()}.mp3`);
+          
+          await musicService.generateSyntheticTrack('Dark / Cinematic', synthPath);
+          
+          short.music = {
+            type: 'synthetic',
+            track: {
+              name: 'Synthetic Dr. Doom Theme',
+              filePath: synthPath,
+              mood: 'Dark / Cinematic',
+              durationSeconds: 24,
+              provider: 'synthetic'
+            }
+          };
+          
+          console.log('✅ Synthetic music generated as fallback');
+          
+        } catch (synthError) {
+          console.error('🎵 Step 3 Failed - All music generation failed:', synthError.message);
+          console.log('🎵 Proceeding without music');
+          short.music = null;
+        }
+      }
+    }
 
-    // Fix music path - use direct path without storage.path()
+    // Set up music path for video rendering
     let musicPath = null;
-    // if (short.music?.track?.filePath) {
-    //   const rawPath = short.music.track.filePath;
-    //   // Direct path construction to avoid double prefixing
-    //   musicPath = rawPath.startsWith('storage/') ? `/app/${rawPath}` : `/app/storage/${rawPath}`;
-    //   console.log('🎵 Music path resolved:', musicPath);
-    // }
+    if (short.music?.track?.filePath) {
+      const rawPath = short.music.track.filePath;
+      // Handle different path formats
+      if (rawPath.startsWith('/app/')) {
+        musicPath = rawPath; // Already full path
+      } else if (rawPath.startsWith('storage/')) {
+        musicPath = `/app/${rawPath}`; // Add /app prefix
+      } else if (rawPath.includes('storage/')) {
+        musicPath = `/app/${rawPath}`; // Add /app prefix 
+      } else {
+        musicPath = `/app/storage/${rawPath}`; // Default storage path
+      }
+      console.log('🎵 Music path resolved:', { original: rawPath, resolved: musicPath });
+    } else if (short.music?.track) {
+      console.warn('🎵 Music track found but no filePath:', short.music.track);
+    } else if (short.music) {
+      console.warn('🎵 Music object found but no track:', short.music);
+    } else {
+      console.log('🎵 No music assigned to short');
+    }
 
     // USE ALL AVAILABLE ASSETS - not just script scenes
     const allAvailableImages = short.assets.map(asset => asset.key);
