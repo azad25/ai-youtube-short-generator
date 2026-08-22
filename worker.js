@@ -35,54 +35,13 @@ const worker = new Worker('shorts-pipeline', async (job) => {
       short.status = 'GENERATING_SCRIPT';
       await saveShort(short);
 
-      // Import prompts to generate script
-      const { PROMPT_TEMPLATES, renderPrompt } = await import('./lib/prompts.js');
+      // Use ShortsService to handle fallback logic (OpenRouter -> HuggingFace)
+      const { ShortsService } = await import('./routes/shorts.js');
+      const shortsService = new ShortsService({ /* no dependencies needed for script generation */ });
       
-      const global = PROMPT_TEMPLATES.find(p => p.id === 'global-system')?.content || '';
-      const template = PROMPT_TEMPLATES.find(p => p.id === 'upcoming-movie')?.content || '';
-      const variables = { 
-        topic: short.topic, 
-        content_type: short.contentType, 
-        duration: short.duration, 
-        channel_style: short.style, 
-        language: short.language 
-      };
+      const scriptResult = await shortsService.generateScriptSync(short);
       
-      const evidence = JSON.stringify(short.facts.map(({ id, statement, classification, sourceIds, confidence }) => 
-        ({ id, statement, classification, sourceIds, confidence })));
-      
-      const generated = await generateEvidenceBoundScript({ 
-        system: global, 
-        prompt: `${renderPrompt(template, variables)}\n\nEvidence package (the only factual source):\n${evidence}\n\nEvery factual statement must occur in claims with evidence IDs.` 
-      });
-
-      // Record usage
-      await recordBudgetUsage('script_generation', 'openrouter', generated.usage.cost, {
-        model: process.env.OPENROUTER_MODEL,
-        inputTokens: generated.usage.inputTokens,
-        outputTokens: generated.usage.outputTokens,
-        shortId
-      });
-
-      const review = reviewScriptClaims(generated.object.claims, short.facts, short.minimumSources);
-      if (!review.passed) {
-        short.status = 'FAILED';
-        short.error = `Factuality gate failed: ${review.failures.join(' ')}`;
-        await saveShort(short);
-        throw new Error(short.error);
-      }
-
-      const adversarial = await runAdversarialFactReview({ evidence: short.facts, script: generated.object });
-      if (!adversarial.object.passed || adversarial.object.unsupportedClaims.length) {
-        short.status = 'FAILED';
-        short.error = `Adversarial factuality review failed: ${adversarial.object.unsupportedClaims.join(' ')}`;
-        await saveShort(short);
-        throw new Error(short.error);
-      }
-
-      short.script = generated.object;
-      short.script.factuality = { ...review, adversarial: adversarial.object };
-      short.script.usage = { writer: generated.usage, reviewer: adversarial.usage };
+      short.script = scriptResult.script;
       short.status = 'GENERATING_SCENES';
       await saveShort(short);
     }

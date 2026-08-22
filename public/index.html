@@ -35,6 +35,41 @@
         </nav>
       </header>
 
+      <!-- YouTube Analytics Banner -->
+      <section class="youtube-banner" id="youtube-banner" style="display: none;">
+        <div class="youtube-banner-content">
+          <div class="channel-branding">
+            <img id="banner-channel-thumbnail" src="" alt="Channel thumbnail" class="banner-channel-avatar">
+            <div class="channel-info">
+              <h2 id="banner-channel-title">Marvel Central</h2>
+              <p id="banner-channel-description">Marvel Comic-Style YouTube Shorts</p>
+            </div>
+          </div>
+          <div class="analytics-metrics">
+            <div class="metric-item primary">
+              <div class="metric-number" id="banner-subscribers">0</div>
+              <div class="metric-label">Subscribers</div>
+            </div>
+            <div class="metric-item">
+              <div class="metric-number" id="banner-videos">0</div>
+              <div class="metric-label">Videos</div>
+            </div>
+            <div class="metric-item">
+              <div class="metric-number" id="banner-views">0</div>
+              <div class="metric-label">Total Views</div>
+            </div>
+            <div class="metric-item">
+              <div class="metric-number" id="banner-status">CONNECTED</div>
+              <div class="metric-label">Status</div>
+            </div>
+          </div>
+          <div class="banner-actions">
+            <button class="compact-button" id="refresh-banner-analytics">REFRESH</button>
+            <a href="https://studio.youtube.com" target="_blank" class="compact-button outline">YOUTUBE STUDIO</a>
+          </div>
+        </div>
+      </section>
+
       <main id="workspace">
         <section class="hero-header">
           <div>
@@ -169,7 +204,12 @@
           </section>
 
           <section class="panel media-library-panel">
-            <div class="panel-heading"><div><p class="eyebrow">CHANNEL VIDEOS</p><h2>Uploaded to channel</h2></div></div>
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">PUBLISHED SHORTS</p>
+                <h2>Marvel Comic Videos</h2>
+              </div>
+            </div>
             <div class="media-library-list" id="uploaded-video-list"></div>
           </section>
         </section>

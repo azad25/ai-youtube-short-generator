@@ -200,6 +200,38 @@ export class ShortsService {
   }
 
   async generateScriptSync(short) {
+    // Try OpenRouter first, then Mistral, then Hugging Face as final fallback
+    const hasOpenRouter = process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_MODEL;
+    
+    if (hasOpenRouter) {
+      try {
+        console.log('📝 Attempting script generation with OpenRouter...');
+        return await this.generateScriptOpenRouter(short);
+      } catch (error) {
+        console.warn('⚠️ OpenRouter script failed, trying Mistral fallback:', error.message);
+      }
+    }
+
+    // Try Mistral as second option
+    if (process.env.MISTRAL_API_KEY) {
+      try {
+        console.log('🎯 Generating script with Mistral fallback...');
+        return await this.generateScriptMistral(short);
+      } catch (error) {
+        console.warn('⚠️ Mistral script failed, trying Hugging Face as final fallback:', error.message);
+      }
+    }
+
+    // Final fallback to Hugging Face
+    if (process.env.HF_API_KEY || process.env.HF_TOKEN) {
+      console.log('🤖 Generating script with Hugging Face fallback...');
+      return await this.generateScriptHuggingFace(short);
+    }
+
+    throw new Error('No script generation providers available. Configure OPENROUTER_API_KEY, MISTRAL_API_KEY, or HF_API_KEY.');
+  }
+
+  async generateScriptOpenRouter(short) {
     // Direct script generation using OpenRouter
     if (!process.env.OPENROUTER_API_KEY) {
       throw new Error('OpenRouter API key not configured');
@@ -262,6 +294,76 @@ export class ShortsService {
 
     } catch (error) {
       console.error('OpenRouter script generation failed:', error);
+      throw error;
+    }
+  }
+
+  async generateScriptMistral(short) {
+    const { mistralProvider } = await import('../lib/mistral.js');
+    
+    if (!mistralProvider.isAvailable()) {
+      throw new Error('Mistral API key not configured');
+    }
+
+    console.log(`🎯 Calling Mistral to generate script for: ${short.topic}`);
+    
+    // Build evidence context
+    const facts = short.facts || [];
+    const evidence = facts.map(fact => `${fact.statement} [${fact.sourceIds?.join(', ') || 'Unknown'}]`).join('\n');
+
+    try {
+      const scriptData = await mistralProvider.generateComicScript({
+        topic: short.topic,
+        contentType: short.contentType,
+        duration: short.duration,
+        evidence,
+        language: short.language || 'English'
+      });
+
+      // Parse and structure the script using existing parser
+      const script = this.parseGeneratedScript(JSON.stringify(scriptData), short);
+      
+      console.log(`✅ Mistral Script generated: ${script.scenes?.length || 0} scenes, ${script.title}`);
+      
+      return { script };
+
+    } catch (error) {
+      console.error('Mistral script generation failed:', error);
+      throw error;
+    }
+  }
+
+  async generateScriptHuggingFace(short) {
+    const { huggingFaceProvider } = await import('../lib/huggingface.js');
+    
+    if (!huggingFaceProvider.isAvailable()) {
+      throw new Error('Hugging Face API key not configured');
+    }
+
+    console.log(`🤖 Calling Hugging Face to generate script for: ${short.topic}`);
+    
+    // Build evidence context
+    const facts = short.facts || [];
+    const evidence = facts.map(fact => `${fact.statement} [${fact.sourceIds?.join(', ') || 'Unknown'}]`).join('\n');
+
+    try {
+      const scriptData = await huggingFaceProvider.generateComicScript({
+        topic: short.topic,
+        contentType: short.contentType,
+        duration: short.duration,
+        evidence,
+        language: short.language || 'English'
+      });
+
+      // Parse and structure the script using existing parser
+      const script = this.parseGeneratedScript(JSON.stringify(scriptData), short);
+      
+      console.log(`✅ HF Script generated: ${script.scenes?.length || 0} scenes, ${script.title}`);
+      
+      return { script };
+
+    } catch (error) {
+      console.error('Hugging Face script generation failed:', error);
       throw error;
     }
   }

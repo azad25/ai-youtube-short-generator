@@ -318,6 +318,74 @@ function updateChannelInfo(channelInfo) {
   if (channelInfo.thumbnails?.medium?.url) {
     $('#channel-thumbnail').src = channelInfo.thumbnails.medium.url;
   }
+  
+  // Update YouTube banner
+  updateYouTubeBanner(channelInfo);
+}
+
+function updateYouTubeBanner(channelInfo) {
+  const banner = $('#youtube-banner');
+  if (!banner) return;
+  
+  // Show the banner
+  banner.style.display = 'block';
+  
+  const stats = channelInfo.statistics || {};
+  const subscriberCount = parseInt(stats.subscriberCount) || 0;
+  const videoCount = parseInt(stats.videoCount) || 0;
+  const viewCount = parseInt(stats.viewCount) || 0;
+  
+  // Update banner content
+  $('#banner-channel-title').textContent = channelInfo.title;
+  $('#banner-subscribers').textContent = formatSubscriberCount(subscriberCount);
+  $('#banner-videos').textContent = videoCount;
+  $('#banner-views').textContent = formatSubscriberCount(viewCount);
+  
+  if (channelInfo.thumbnails?.medium?.url) {
+    $('#banner-channel-thumbnail').src = channelInfo.thumbnails.medium.url;
+  }
+
+function updateYouTubeAnalytics(channelInfo) {
+  const analyticsContainer = $('#youtube-analytics');
+  if (!analyticsContainer) return;
+  
+  const stats = channelInfo.statistics || {};
+  const subscriberCount = parseInt(stats.subscriberCount) || 0;
+  const videoCount = parseInt(stats.videoCount) || 0;
+  const viewCount = parseInt(stats.viewCount) || 0;
+  
+  analyticsContainer.innerHTML = `
+    <div class="analytics-grid">
+      <div class="analytics-card primary">
+        <div class="analytics-icon">👥</div>
+        <div class="analytics-content">
+          <div class="analytics-number">${formatSubscriberCount(subscriberCount)}</div>
+          <div class="analytics-label">Subscribers</div>
+        </div>
+      </div>
+      <div class="analytics-card">
+        <div class="analytics-icon">🎥</div>
+        <div class="analytics-content">
+          <div class="analytics-number">${videoCount}</div>
+          <div class="analytics-label">Videos Published</div>
+        </div>
+      </div>
+      <div class="analytics-card">
+        <div class="analytics-icon">👀</div>
+        <div class="analytics-content">
+          <div class="analytics-number">${formatSubscriberCount(viewCount)}</div>
+          <div class="analytics-label">Total Views</div>
+        </div>
+      </div>
+      <div class="analytics-card">
+        <div class="analytics-icon">📺</div>
+        <div class="analytics-content">
+          <div class="analytics-number">${channelInfo.title}</div>
+          <div class="analytics-label">Channel Name</div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 async function connectYouTube() {
@@ -519,18 +587,25 @@ function renderUploadedVideos(shorts) {
     .map((short) => `
       <article class="media-card">
         <img src="${escapeHtml(getYouTubeThumbnail(short))}" alt="${escapeHtml(getShortTitle(short))}" loading="lazy">
+        <div class="video-overlay">
+          <div class="video-stats">
+            <span class="view-count">👁 ${formatSubscriberCount(short.youtube?.statistics?.viewCount || 0)} views</span>
+            <span class="upload-date">${escapeHtml(formatDateTime(short.youtube?.publishedAt || short.updatedAt || short.createdAt))}</span>
+          </div>
+        </div>
         <div class="media-card-body">
           <div class="media-card-top">
             <h3 class="media-card-title">${escapeHtml(getShortTitle(short))}</h3>
             <span class="draft-pill passed">${escapeHtml(short.youtube?.privacyStatus || 'published').toUpperCase()}</span>
           </div>
           <p class="media-card-meta">
-            Uploaded ${escapeHtml(formatDateTime(short.youtube?.publishedAt || short.updatedAt || short.createdAt))}<br>
-            ${escapeHtml(short.youtube?.channelTitle || state.youtube?.channelInfo?.title || 'Connected channel')}
+            <strong>${formatSubscriberCount(short.youtube?.statistics?.viewCount || 0)} views</strong> • 
+            <strong>${formatSubscriberCount(short.youtube?.statistics?.likeCount || 0)} likes</strong><br>
+            ${escapeHtml(short.youtube?.channelTitle || state.youtube?.channelInfo?.title || 'Marvel Central')}
           </p>
           <div class="media-card-actions">
-            <a class="media-card-link" href="${escapeHtml(short.youtube?.url || '#')}" target="_blank" rel="noopener noreferrer">Open on YouTube</a>
-            ${short.video?.key ? `<a class="media-card-link" href="${escapeHtml(getGeneratedVideoUrl(short))}" target="_blank" rel="noopener noreferrer">Preview Render</a>` : ''}
+            <a class="media-card-link primary" href="${escapeHtml(short.youtube?.url || '#')}" target="_blank" rel="noopener noreferrer">📺 Watch on YouTube</a>
+            ${short.video?.key ? `<a class="media-card-link" href="${escapeHtml(getGeneratedVideoUrl(short))}" target="_blank" rel="noopener noreferrer">🎬 Preview Render</a>` : ''}
           </div>
         </div>
       </article>
@@ -1648,6 +1723,12 @@ document.addEventListener('click', (event) => {
   } else if (event.target.id === 'refresh-channel-info') {
     event.preventDefault();
     refreshChannelInfo();
+  } else if (event.target.id === 'refresh-analytics') {
+    event.preventDefault();
+    refreshChannelInfo(); // Same function refreshes analytics
+  } else if (event.target.id === 'refresh-banner-analytics') {
+    event.preventDefault();
+    refreshChannelInfo(); // Refresh banner analytics
   }
 });
 

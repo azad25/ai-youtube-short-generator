@@ -14,6 +14,8 @@
     "lint": "node --check server.js lib/*.js"
   },
   "dependencies": {
+    "@huggingface/inference": "^4.13.28",
+    "@mistralai/mistralai": "^2.6.4",
     "@openrouter/ai-sdk-provider": "^1.0.0",
     "ai": "^5.0.0",
     "bullmq": "^5.0.0",
