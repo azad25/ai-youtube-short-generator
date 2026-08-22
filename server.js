@@ -34,6 +34,11 @@ import { BatchService, processBatchHandler } from './routes/batch.js';
 import { ResearchService, searchRedditFactsHandler, enhanceEvidenceHandler, autoGenerateEvidenceHandler } from './routes/research.js';
 import { initializeScheduler, getSchedulerStatusHandler, startSchedulerHandler, stopSchedulerHandler, createTestScheduleHandler } from './routes/scheduler.js';
 
+// Comic shorts handlers (importing specific functions for now)
+import { ComicGenerator } from './lib/comic.js';
+import { ComicRenderer } from './lib/comic-renderer.js';
+import { createComicHandler, renderComicHandler, getComicHandler, getComicCharactersHandler, previewComicHandler } from './routes/comic-handlers.js';
+
 // Load environment variables
 async function loadEnv() {
   try {
@@ -104,6 +109,10 @@ const musicService = new MusicRouteService();
 const batchService = new BatchService({ shortsService, queueService, budgetService });
 const researchService = new ResearchService();
 
+// Initialize comic services
+const comicGenerator = new ComicGenerator();
+const comicRenderer = new ComicRenderer();
+
 // Initialize scheduler service
 const schedulerService = initializeScheduler({ 
   databaseService, 
@@ -145,7 +154,9 @@ const serviceContext = {
   musicService,
   batchService,
   researchService,
-  schedulerService
+  schedulerService,
+  comicGenerator,
+  comicRenderer
 };
 
 // Public routes
@@ -205,7 +216,14 @@ const authRoutes = [
   { method: 'GET', pattern: '/api/scheduler/status', handler: getSchedulerStatusHandler },
   { method: 'POST', pattern: '/api/scheduler/start', handler: startSchedulerHandler },
   { method: 'POST', pattern: '/api/scheduler/stop', handler: stopSchedulerHandler },
-  { method: 'POST', pattern: '/api/scheduler/test', handler: createTestScheduleHandler }
+  { method: 'POST', pattern: '/api/scheduler/test', handler: createTestScheduleHandler },
+  
+  // Comic shorts management
+  { method: 'POST', pattern: '/api/comic-shorts', handler: createComicHandler },
+  { method: 'POST', pattern: /^\/api\/comic-shorts\/([^/]+)\/render$/, handler: renderComicHandler },
+  { method: 'GET', pattern: /^\/api\/comic-shorts\/([^/]+)$/, handler: getComicHandler },
+  { method: 'GET', pattern: '/api/comic-shorts/characters', handler: getComicCharactersHandler },
+  { method: 'POST', pattern: '/api/comic-shorts/preview', handler: previewComicHandler }
 ];
 
 // Register protected routes with auth middleware
@@ -224,7 +242,9 @@ authRoutes.forEach(route => {
         const params = {};
         for (let i = 1; i < match.length; i++) {
           // Map to semantic param names
-          if (route.pattern.source.includes('shorts')) {
+          if (route.pattern.source.includes('comic-shorts')) {
+            if (i === 1) params.shortId = match[i];
+          } else if (route.pattern.source.includes('shorts')) {
             if (i === 1) params.shortId = match[i];
             if (i === 2) params.sceneNumber = match[i];
           } else if (route.pattern.source.includes('prompts') && i === 1) {

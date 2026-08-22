@@ -1,5 +1,6 @@
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { json, body } from '../lib/middleware.js';
 import { budgetSnapshot, recommendImagePlan } from '../lib/budget.js';
@@ -44,7 +45,7 @@ export class ShortsService {
     }
 
     const short = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       ...shortData,
       duration: shortData.duration || 60, // Default to 60 seconds for YouTube Shorts
       language: shortData.language || 'English',
@@ -287,6 +288,12 @@ export class ShortsService {
   }
 
   buildScriptPrompt(short, evidenceContext) {
+    const isComicStyle = short.style === 'comic' || short.style === 'marvel-comic';
+    
+    if (isComicStyle) {
+      return this.buildComicScriptPrompt(short, evidenceContext);
+    }
+    
     return `Create a compelling ${short.duration}-second Marvel Short script about "${short.topic}" for ${short.contentType} content.
 
 REQUIREMENTS:
@@ -353,6 +360,113 @@ EXAMPLE SCENE FORMAT:
 Generate the script now with movie-quality Marvel scenes:`
   }
 
+  buildComicScriptPrompt(short, evidenceContext) {
+    return `Create a compelling ${short.duration}-second Marvel COMIC BOOK style script about "${short.topic}" for ${short.contentType} content.
+
+COMIC BOOK REQUIREMENTS:
+- Duration: Exactly ${short.duration} seconds 
+- Format: 3 composite comic images, each containing 3 story moments (9 total scenes)
+- Style: Authentic Marvel Comics artwork with storytelling depth
+- Truth Mode: ${short.truthMode}
+- Language: ${short.language || 'English'}
+- Target: Marvel comic book fans who want authentic comic book experience
+
+COMIC STRUCTURE:
+- Generate exactly 9 scenes total, grouped into 3 composite images
+- Each composite image shows 3 connected story moments
+- Each scene should be 8 seconds long (perfect for reading and story absorption)
+- Use wide shots with environmental context and story depth
+- Include proper Marvel comic book dialogue and narrative elements
+
+COMIC STORYTELLING GUIDELINES:
+- Create classic Marvel comic book scenes with story progression
+- Each composite image tells a complete story chapter
+- Include comic book dialogue, captions, and sound effects
+- Use evidence-based facts only
+- Feature classic Marvel comic book character designs and environments
+- Include dramatic comic book storytelling elements with proper pacing
+- End with cliffhanger or dramatic revelation suitable for comics
+
+COMPOSITE IMAGE REQUIREMENTS:
+- Each of the 3 images contains multiple story moments/panels
+- Visual descriptions must describe wide Marvel comic book compositions
+- Image prompts should capture storytelling depth and character interactions
+- Include character dialogue, environmental storytelling, action sequences
+- Add classic Marvel comic book visual effects and dramatic compositions
+- Use authentic Jack Kirby and John Romita Sr. artistic styles
+
+${evidenceContext}
+
+RESPONSE FORMAT (JSON):
+{
+  "title": "YouTube-ready comic title under 60 characters",
+  "hook": "Opening comic hook that grabs attention",
+  "narration": "Comic book narrator voice with dramatic storytelling across 9 scenes",
+  "youtube_description": "YouTube description with comic hashtags and compelling text",
+  "hashtags": ["Marvel", "Comics", "MarvelComics", "Superhero", "ComicBooks"],
+  "scenes": [
+    {
+      "scene_number": 1,
+      "composite_image": 1,
+      "story_moment": 1,
+      "start_time": 0,
+      "end_time": 8,
+      "panel_title": "Opening chapter title",
+      "caption": "Narrator caption setting the scene",
+      "dialogue": "Character dialogue with proper comic format",
+      "sound_effect": "Comic book sound effect (BOOM, CRASH, etc.)",
+      "visual_description": "Detailed description of the story moment within composite image",
+      "image_prompt": "Marvel comic book art: [detailed scene with environmental context and character interactions], wide shot composition with storytelling depth, multiple story elements, authentic Marvel Comics style, Jack Kirby artwork, bold comic lines, vibrant colors, dramatic perspective"
+    },
+    // Continue for all 9 scenes, grouped by composite_image (1, 2, or 3)
+  ],
+  "composite_images": [
+    {
+      "image_number": 1,
+      "scenes": [1, 2, 3],
+      "story_chapter": "Opening chapter description",
+      "combined_prompt": "Marvel comic book composite image showing three connected story moments: [scene 1], [scene 2], [scene 3], wide Marvel comic book layout with storytelling depth"
+    },
+    {
+      "image_number": 2, 
+      "scenes": [4, 5, 6],
+      "story_chapter": "Development chapter description",
+      "combined_prompt": "Marvel comic book composite image showing three story progression moments"
+    },
+    {
+      "image_number": 3,
+      "scenes": [7, 8, 9],
+      "story_chapter": "Climax chapter description", 
+      "combined_prompt": "Marvel comic book composite image showing three climactic story moments"
+    }
+  ],
+  "claims": [
+    {
+      "statement": "Factual claim from comic script",
+      "classification": "CONFIRMED",
+      "evidence_ids": ["FACT-1"]
+    }
+  ]
+}
+
+EXAMPLE COMPOSITE STRUCTURE:
+{
+  "scene_number": 1,
+  "composite_image": 1,
+  "story_moment": 1,
+  "start_time": 0,
+  "end_time": 8,
+  "panel_title": "CHAPTER 1: THE THREAT EMERGES",
+  "caption": "Meanwhile, in the depths of Latveria...",
+  "dialogue": "DOOM: At last! My master plan unfolds perfectly!",
+  "sound_effect": "KRAKOOOM",
+  "visual_description": "Doctor Doom stands triumphantly in his castle throne room, his metal armor gleaming as lightning crackles around him. The wide shot shows the full grandeur of his fortress with technological devices and mystical artifacts, telling the story of his preparation and power.",
+  "image_prompt": "Marvel comic book art: Doctor Doom in his classic metal armor and green cape standing in his massive castle throne room with technological devices and mystical artifacts visible throughout the scene, lightning crackling around him, wide shot composition showing environmental context and story depth, multiple visual story elements, authentic Marvel Comics style, Jack Kirby artwork, bold black ink lines, vibrant comic colors, dramatic perspective, storytelling composition"
+}
+
+Generate exactly 9 scenes grouped into 3 composite images with authentic Marvel Comics storytelling depth and visual narrative!`
+  }
+
   parseGeneratedScript(content, short) {
     try {
       // Try to extract JSON from the response
@@ -368,15 +482,72 @@ Generate the script now with movie-quality Marvel scenes:`
         throw new Error('Script missing required fields (title, narration, scenes)');
       }
 
-      // Ensure scenes have proper structure
-      script.scenes = script.scenes.map((scene, index) => ({
-        scene_number: index + 1,
-        start_time: scene.start_time || index * 6,
-        end_time: scene.end_time || (index + 1) * 6,
-        caption: scene.caption || `Scene ${index + 1}`,
-        visual_description: scene.visual_description || 'Marvel cinematic scene',
-        image_prompt: scene.image_prompt || `${short.topic} cinematic scene`
-      }));
+      const isComicStyle = short.style === 'comic' || short.style === 'marvel-comic';
+      
+      console.log(`🎬 Processing script for style: ${short.style}, isComicStyle: ${isComicStyle}, scenes: ${script.scenes.length}`);
+      
+      if (isComicStyle) {
+        // For comic style, ensure we have exactly 9 scenes by expanding or creating
+        while (script.scenes.length < 9) {
+          // Duplicate and modify existing scenes to reach 9 scenes
+          const baseScene = script.scenes[script.scenes.length % script.scenes.length];
+          script.scenes.push({
+            ...baseScene,
+            scene_number: script.scenes.length + 1,
+            start_time: script.scenes.length * 8 / 3,
+            end_time: (script.scenes.length + 1) * 8 / 3,
+            caption: `${baseScene.caption} - Part ${script.scenes.length + 1}`,
+            visual_description: `${baseScene.visual_description} with different perspective`
+          });
+        }
+        
+        // Ensure exactly 9 scenes
+        script.scenes = script.scenes.slice(0, 9);
+        
+        // Transform scenes to proper comic structure with 3 scenes per composite image
+        script.scenes = script.scenes.map((scene, index) => ({
+          scene_number: index + 1,
+          composite_image: Math.floor(index / 3) + 1,
+          story_moment: (index % 3) + 1,
+          start_time: index * (24/9),  // Distribute 24 seconds across 9 scenes
+          end_time: (index + 1) * (24/9),
+          panel_title: scene.panel_title || scene.caption || `Panel ${index + 1}`,
+          caption: scene.caption || `Comic scene ${index + 1}`,
+          dialogue: scene.dialogue || `"This is ${short.topic}!"`,
+          sound_effect: scene.sound_effect || ['BOOM!', 'POW!', 'CRASH!', 'BAM!', 'THUD!', 'WHOOSH!'][index % 6],
+          visual_description: scene.visual_description || 'Marvel comic scene',
+          image_prompt: scene.image_prompt || `${short.topic} Marvel comic book art`
+        }));
+        
+        // Create composite_images structure for 3 images with 3 scenes each
+        script.composite_images = [];
+        for (let i = 0; i < 3; i++) {
+          const imageScenes = script.scenes.filter(scene => 
+            scene.composite_image === (i + 1)
+          );
+          
+          const combinedPrompt = `Marvel comic book composite image showing three connected story moments horizontally: ${imageScenes.map(s => s.visual_description).join(' | ')}, wide 3-panel comic book layout with storytelling depth, Jack Kirby style, authentic Marvel Comics illustration, comic book panels with borders`;
+          
+          script.composite_images.push({
+            image_number: i + 1,
+            scenes: imageScenes.map(s => s.scene_number),
+            story_chapter: `Chapter ${i + 1}: ${imageScenes.map(s => s.panel_title).join(' → ')}`,
+            combined_prompt: combinedPrompt
+          });
+        }
+        
+        console.log(`📚 Comic script parsed: ${script.scenes.length} scenes, ${script.composite_images.length} composite images`);
+      } else {
+        // Regular cinematic style scenes
+        script.scenes = script.scenes.map((scene, index) => ({
+          scene_number: index + 1,
+          start_time: scene.start_time || index * 6,
+          end_time: scene.end_time || (index + 1) * 6,
+          caption: scene.caption || `Scene ${index + 1}`,
+          visual_description: scene.visual_description || 'Marvel cinematic scene',
+          image_prompt: scene.image_prompt || `${short.topic} cinematic scene`
+        }));
+      }
 
       return script;
 
@@ -389,29 +560,73 @@ Generate the script now with movie-quality Marvel scenes:`
   }
 
   createFallbackScript(short, rawContent) {
-    const sceneCount = Math.ceil(short.duration / 6);
-    const scenes = [];
+    const isComicStyle = short.style === 'comic' || short.style === 'marvel-comic';
     
-    for (let i = 0; i < sceneCount; i++) {
-      scenes.push({
-        scene_number: i + 1,
-        start_time: i * 6,
-        end_time: (i + 1) * 6,
-        caption: `${short.topic} - Part ${i + 1}`,
-        visual_description: `Cinematic scene showing ${short.topic}`,
-        image_prompt: `${short.topic} Marvel cinematic scene, high quality, detailed`
-      });
-    }
+    if (isComicStyle) {
+      // Create 9 scenes for comic style (3 composite images with 3 scenes each)
+      const scenes = [];
+      for (let i = 0; i < 9; i++) {
+        scenes.push({
+          scene_number: i + 1,
+          composite_image: Math.floor(i / 3) + 1,
+          story_moment: (i % 3) + 1,
+          start_time: i * 8,
+          end_time: (i + 1) * 8,
+          panel_title: `${short.topic} - Panel ${i + 1}`,
+          caption: `Comic scene ${i + 1} of ${short.topic}`,
+          dialogue: `Dialogue for scene ${i + 1}`,
+          sound_effect: i % 3 === 0 ? 'BOOM' : i % 3 === 1 ? 'POW' : 'CRASH',
+          visual_description: `Marvel comic scene showing ${short.topic}`,
+          image_prompt: `Marvel comic book art: ${short.topic} scene ${i + 1}, Jack Kirby style, authentic Marvel Comics illustration`
+        });
+      }
+      
+      const composite_images = [];
+      for (let i = 0; i < 3; i++) {
+        composite_images.push({
+          image_number: i + 1,
+          scenes: [i * 3 + 1, i * 3 + 2, i * 3 + 3],
+          story_chapter: `${short.topic} - Chapter ${i + 1}`,
+          combined_prompt: `Marvel comic book composite image showing ${short.topic} story chapter ${i + 1}, three connected story moments, wide Marvel comic book layout with storytelling depth`
+        });
+      }
+      
+      return {
+        title: `${short.topic} - Marvel Comic`,
+        hook: `Discover ${short.topic} in authentic Marvel Comics style`,
+        narration: rawContent.substring(0, 500) || `This is the comic book story of ${short.topic} in the Marvel Universe.`,
+        youtube_description: `${short.topic} Marvel Comic Style. #Marvel #Comics #MarvelComics`,
+        hashtags: ['Marvel', 'Comics', 'MarvelComics', short.topic.replace(/\s+/g, '')],
+        scenes,
+        composite_images,
+        claims: []
+      };
+    } else {
+      // Regular cinematic fallback
+      const sceneCount = Math.ceil(short.duration / 6);
+      const scenes = [];
+      
+      for (let i = 0; i < sceneCount; i++) {
+        scenes.push({
+          scene_number: i + 1,
+          start_time: i * 6,
+          end_time: (i + 1) * 6,
+          caption: `${short.topic} - Part ${i + 1}`,
+          visual_description: `Cinematic scene showing ${short.topic}`,
+          image_prompt: `${short.topic} Marvel cinematic scene, high quality, detailed`
+        });
+      }
 
-    return {
-      title: `${short.topic} - ${short.contentType}`,
-      hook: `Discover the truth about ${short.topic}`,
-      narration: rawContent.substring(0, 500) || `This is the story of ${short.topic} in the Marvel Cinematic Universe.`,
-      youtube_description: `Everything you need to know about ${short.topic}. #Marvel #MCU`,
-      hashtags: ['Marvel', 'MCU', short.topic.replace(/\s+/g, '')],
-      scenes,
-      claims: []
-    };
+      return {
+        title: `${short.topic} - ${short.contentType}`,
+        hook: `Discover the truth about ${short.topic}`,
+        narration: rawContent.substring(0, 500) || `This is the story of ${short.topic} in the Marvel Cinematic Universe.`,
+        youtube_description: `Everything you need to know about ${short.topic}. #Marvel #MCU`,
+        hashtags: ['Marvel', 'MCU', short.topic.replace(/\s+/g, '')],
+        scenes,
+        claims: []
+      };
+    }
   }
 
   evidenceGate(short) {
@@ -574,8 +789,68 @@ export async function generateImageHandler(request, response, { shortsService, b
       return json(response, 409, { error: 'Generate a script before generating scene images.' });
     }
     
-    const scene = short.script.scenes.find(item => Number(item.scene_number) === Number(sceneNumber));
-    if (!scene) return json(response, 404, { error: 'Scene not found.' });
+    // Check if this is comic style with composite images
+    const isComicStyle = short.style === 'comic' || short.style === 'marvel-comic';
+    
+    let scene, imagePrompt;
+    
+    if (isComicStyle) {
+      // For comic style, force create composite structure if it doesn't exist
+      if (!short.script.composite_images) {
+        console.log('📚 Creating composite images structure for comic style');
+        
+        // Ensure we have enough scenes by duplicating if needed
+        const scenes = [...short.script.scenes];
+        while (scenes.length < 9) {
+          const baseScene = scenes[scenes.length % scenes.length];
+          scenes.push({
+            ...baseScene,
+            scene_number: scenes.length + 1,
+            caption: `${baseScene.caption} - Extended`,
+            visual_description: `${baseScene.visual_description} with different angle`
+          });
+        }
+        
+        // Take only first 9 scenes
+        const comicScenes = scenes.slice(0, 9);
+        
+        // Create composite images for 3 images with 3 scenes each
+        short.script.composite_images = [];
+        for (let i = 0; i < 3; i++) {
+          const imageScenes = comicScenes.slice(i * 3, (i + 1) * 3);
+          const combinedPrompt = `Marvel comic book composite image showing three horizontal comic panels: ${imageScenes.map(s => s.visual_description || s.caption).join(' | ')}, authentic Marvel Comics style with Jack Kirby artwork, 3-panel comic layout with borders, vibrant comic book colors, dramatic comic book perspective`;
+          
+          short.script.composite_images.push({
+            image_number: i + 1,
+            scenes: imageScenes.map(s => s.scene_number),
+            story_chapter: `Comic Chapter ${i + 1}`,
+            combined_prompt: combinedPrompt
+          });
+        }
+      }
+      
+      // For comic style with composite images - generate based on composite image number
+      const compositeImage = short.script.composite_images.find(img => img.image_number === Number(sceneNumber));
+      if (!compositeImage) {
+        return json(response, 404, { error: 'Composite image not found.' });
+      }
+      
+      // Use the combined prompt for the composite image
+      imagePrompt = compositeImage.combined_prompt;
+      scene = {
+        scene_number: sceneNumber,
+        image_prompt: imagePrompt,
+        composite_scenes: compositeImage.scenes,
+        story_chapter: compositeImage.story_chapter
+      };
+      
+      console.log(`🦸 Generating composite Marvel comic image ${sceneNumber} with ${compositeImage.scenes.length} story moments`);
+    } else {
+      // Regular single scene generation
+      scene = short.script.scenes.find(item => Number(item.scene_number) === Number(sceneNumber));
+      if (!scene) return json(response, 404, { error: 'Scene not found.' });
+      imagePrompt = scene.image_prompt;
+    }
     
     // Budget check
     const budget = await budgetService.getBudgetState();
@@ -584,22 +859,32 @@ export async function generateImageHandler(request, response, { shortsService, b
     }
     
     const asset = await generateSceneImage({ 
-      prompt: scene.image_prompt, 
+      prompt: imagePrompt, 
       shortId: short.id, 
-      sceneNumber: scene.scene_number 
+      sceneNumber: Number(sceneNumber),
+      style: isComicStyle ? 'comic' : 'cinematic'
     });
+    
+    // Add composite image metadata if applicable
+    if (isComicStyle && scene.composite_scenes) {
+      asset.composite_scenes = scene.composite_scenes;
+      asset.story_chapter = scene.story_chapter;
+      asset.is_composite = true;
+    }
     
     // Record budget usage
     if (shortsService.databaseService) {
       await shortsService.databaseService.recordBudgetUsage('image_generation', 'openrouter', asset.cost, {
         model: asset.model,
         shortId,
-        sceneNumber
+        sceneNumber,
+        style: asset.style,
+        is_composite: asset.is_composite || false
       });
     }
     
-    short.assets = [...(short.assets || []).filter(item => item.sceneNumber !== scene.scene_number), 
-      { ...asset, sceneNumber: scene.scene_number, createdAt: new Date().toISOString() }];
+    short.assets = [...(short.assets || []).filter(item => item.sceneNumber !== Number(sceneNumber)), 
+      { ...asset, sceneNumber: Number(sceneNumber), createdAt: new Date().toISOString() }];
     
     if (shortsService.databaseService) {
       await shortsService.databaseService.saveShort(short);
@@ -1050,3 +1335,4 @@ export async function publishHandler(request, response, { shortsService, youtube
     return json(response, error.statusCode || 500, { error: error.message });
   }
 }
+
